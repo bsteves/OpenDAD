@@ -175,16 +175,12 @@ Install the following libraries through the Arduino Library Manager:
 
 ## Future Ideas
 
+* STL files for 3D printable brackets and enclosures for sensor and microcontroller
 * Automatic calibration wizard
 * Rotary encoder menu system
 * Physical calibration buttons
 * Battery-powered operation
 * Audible angle target indicator
-* Temperature monitoring
-* Multiple faceting machine profiles
-* SD card calibration backup
-* Wi-Fi firmware updates
-* Web configuration interface
 
 ---
 
