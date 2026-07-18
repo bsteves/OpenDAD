@@ -1,209 +1,262 @@
-# Open Digital Angle Display (DAD) for Faceting Machines
+# OpenDAD
+### Open Digital Angle Display for Gem Faceting Machines
 
-An open-source Bluetooth-enabled Digital Angle Display (DAD) for gem faceting machines using an ESP32, a TLE5012 magnetic angle sensor, and a small OLED display.
+OpenDAD is an open-source Digital Angle Display (DAD) for gem faceting machines.
 
-The goal of this project is to provide an inexpensive, accurate, and customizable alternative to commercial digital angle displays. The entire system can be built for well under $50 using readily available components.
+It combines an ESP32-S3 microcontroller with a TLE5012 magnetic angle sensor to provide a highly accurate digital angle display accessible from any phone, tablet, or computer using a built-in Wi-Fi web interface.
 
----
-
-## Features
-
-* ±0.01° display resolution
-* TLE5012 magnetic angle sensor
-* ESP32 microcontroller
-* SSD1306 128×64 OLED display
-* Bluetooth connectivity using RemoteXY
-* Three-point calibration (0°, 45°, and 90°)
-* Calibration automatically saved in ESP32 flash memory
-* Exponential angle smoothing
-* Signed angle display (-20° to approximately 100°)
-* Open-source Arduino code
-* No custom PCB required
+Unlike commercial DADs costing several hundred dollars, OpenDAD is inexpensive, fully customizable, and completely open source.
 
 ---
 
-## Hardware
+# Features
 
-| Component       | Notes                                                |
-| --------------- | ---------------------------------------------------- |
-| ESP32 Dev Board | Any ESP32-WROOM development board                    |
-| TLE5012 Sensor  | Chinese V1.1 breakout board using SSC interface      |
-| OLED Display    | SSD1306 128×64 I²C (0.96")                           |
-| Magnet          | 6 mm diametric magnet (mounted on the faceting mast) |
-| Power           | USB                                                  |
-
----
-
-## Wiring
-
-### TLE5012
-
-| ESP32  | TLE5012 |
-| ------ | ------- |
-| GPIO23 | DATA    |
-| GPIO18 | SCK     |
-| GPIO5  | CS      |
-| 3.3V   | VCC     |
-| GND    | GND     |
-
-### OLED
-
-| ESP32  | OLED |
-| ------ | ---- |
-| GPIO21 | SDA  |
-| GPIO22 | SCL  |
-| 3.3V   | VCC  |
-| GND    | GND  |
+- High-resolution digital angle display
+- TLE5012 magnetic angle sensor
+- Seeed Studio XIAO ESP32-S3 controller
+- Built-in Wi-Fi web interface
+- Works from any phone, tablet, or browser
+- Three-point calibration (0°, 45°, 90°)
+- Automatic calibration storage in flash memory
+- Target angle mode
+- Large live angle difference display
+- Exponential smoothing
+- REST API for future integrations
+- Battery operation supported
+- Open-source hardware and software
 
 ---
 
-## Why Bit-Banged SPI?
+# Hardware
 
-Although the TLE5012 uses an SPI-like SSC (Short Serial Communication) interface, the inexpensive Chinese V1.1 breakout boards have proven unreliable using the ESP32 hardware SPI peripheral.
+| Component | Notes |
+|-----------|------|
+| Seeed Studio XIAO ESP32-S3 | Recommended controller |
+| TLE5012 Sensor | Chinese V1.1 SSC breakout |
+| 6 mm diametric magnet | Mounted on faceting mast |
+| 3.7V LiPo battery (optional) | XIAO includes charger |
+| USB-C | Programming and charging |
 
-Instead, this project implements the SSC protocol entirely in software ("bit banging"), which has proven to be extremely reliable.
+The project no longer requires an OLED display or Bluetooth module.
+
+---
+
+# Wiring
+
+## TLE5012
+
+| XIAO ESP32-S3 | TLE5012 |
+|---------------|----------|
+| D4 | DATA |
+| D3 | SCK |
+| D2 | CSQ |
+| 3.3V | VCC |
+| GND | GND |
 
 ---
 
-## Bluetooth Interface
+# Web Interface
 
-The project uses the excellent **RemoteXY** library to communicate with an iPhone or Android device over Bluetooth Low Energy (BLE).
+OpenDAD creates its own Wi-Fi Access Point.
 
-Current controls include:
+Simply connect your phone to:
 
-* **0°** — Store the current quill position as vertical (0°)
-* **45°** — Store the current quill position as 45°
-* **90°** — Store the current quill position as horizontal (90°)
-* **Reset** — Clear all calibration data
+```
+OpenDAD
+```
 
-The current angle is displayed on both the OLED display and the RemoteXY application.
+and browse to
+
+```
+http://192.168.4.1
+```
+
+(or `http://opendad.local` if mDNS is enabled).
+
+The browser interface displays
+
+- Current angle
+- Raw sensor angle
+- Target angle
+- Target difference
+- Calibration controls
+- Connection status
+
+No app installation is required.
 
 ---
+
+# Calibration
+
+OpenDAD uses a three-point calibration:
+
+- Vertical quill → 0°
+- Precision angle block → 45°
+- Horizontal quill → 90°
+
+This compensates for
+
+- Sensor alignment
+- Magnet placement
+- Mechanical offsets
+- Small nonlinearities
+
+Calibration is automatically stored in flash memory.
+
+---
+
+# Target Mode
+
+A target angle can be stored at any time.
+
+The display continuously shows:
+
+- Target angle
+- Signed difference from target
+
+Difference colors indicate proximity:
+
+| Difference | Color |
+|------------|------|
+| ≤0.05° | Green |
+| ≤0.20° | Yellow |
+| ≤0.50° | Orange |
+| >0.50° | Red |
+
+This makes approaching an angle much easier while cutting.
+
+---
+
+# REST API
+
+OpenDAD exposes a simple REST interface.
+
+## Read current status
+
+```
+GET /api/status
+```
+
+Example
+
+```json
+{
+  "angle": 42.16,
+  "rawAngle": 218.34,
+  "target": 43.00,
+  "difference": -0.84,
+  "cal0": true,
+  "cal45": true,
+  "cal90": true,
+  "sensorReady": true
+}
+```
 
 ## Calibration
 
-Unlike many digital angle displays that only provide a single zero offset, this project performs a three-point calibration.
+```
+POST /api/calibrate/0
+POST /api/calibrate/45
+POST /api/calibrate/90
+POST /api/reset
+```
 
-Calibration points:
+## Target
 
-* Vertical quill → 0°
-* 45° test block → 45°
-* Horizontal quill → 90°
-
-These three reference points compensate for:
-
-* Sensor mounting angle
-* Magnet alignment
-* Mechanical tolerances
-* Slight nonlinearities
-
-Calibration data is stored in the ESP32 flash memory and automatically restored after power cycling.
+```
+POST /api/target
+POST /api/target/clear
+```
 
 ---
 
-## Display
+# Smoothing
 
-The OLED displays:
-
-* Current angle (two decimal places)
-* Calibration status
-* Raw sensor value (for debugging)
-
-The displayed angle is normalized so that values near 360° are shown as small negative angles.
-
-For example:
-
-| Raw Sensor | Display |
-| ---------- | ------- |
-| 359.82°    | -0.18°  |
-| 359.05°    | -0.95°  |
-| 0.15°      | 0.15°   |
-
-This makes it much easier to work around the common 0° cutting position.
-
----
-
-## Smoothing
-
-An exponential moving average (EMA) is used to reduce display jitter.
+OpenDAD uses an exponential moving average
 
 ```cpp
 filtered = filtered + α(new - filtered)
 ```
 
-The smoothing factor is controlled by:
+The smoothing factor is configurable in software.
 
-```cpp
-const float SMOOTHING_ALPHA = 0.25;
+---
+
+# Software Structure
+
+```
+OpenDAD.ino
+Sensor.ino
+Calibration.ino
+Target.ino
+WiFi.ino
+WebServer.ino
+WebPage.ino
 ```
 
-Suggested values:
-
-| Alpha | Behavior          |
-| ----- | ----------------- |
-| 0.10  | Very smooth       |
-| 0.20  | Smooth            |
-| 0.25  | Good compromise   |
-| 0.30  | Fast response     |
-| 0.40  | Minimal filtering |
+Each module has a single responsibility, making the project easier to maintain and extend.
 
 ---
 
-## Arduino Libraries
+# Required Arduino Libraries
 
-Install the following libraries through the Arduino Library Manager:
+- ESP32 Arduino Core
+- Preferences
 
-* Adafruit GFX
-* Adafruit SSD1306
-* Preferences (ESP32)
-* RemoteXY
-* BLE (included with ESP32 core)
+No external web libraries are required.
 
 ---
 
-## Building
+# Building
 
 1. Install the ESP32 Arduino core.
-2. Install the required libraries.
-3. Connect the hardware.
-4. Compile and upload.
-5. Open the RemoteXY app.
-6. Connect via Bluetooth.
-7. Perform the 0° / 45° / 90° calibration.
+2. Select **Seeed Studio XIAO ESP32-S3**.
+3. Install the required libraries.
+4. Wire the TLE5012.
+5. Compile and upload.
+6. Connect to the OpenDAD Wi-Fi network.
+7. Open the web interface.
+8. Perform the 0° / 45° / 90° calibration.
 
 ---
 
-## Future Ideas
+# Roadmap
 
-* STL files for 3D printable brackets and enclosures for sensor and microcontroller
-* Automatic calibration wizard
-* Rotary encoder menu system
-* Physical calibration buttons
-* Battery-powered operation
-* Audible angle target indicator
+Future ideas include:
+
+- 3D printable mounting hardware
+- Audible target indicator
+- Calibration wizard
+- Web-based settings page
+- Battery level display
+- Wake Lock support for mobile browsers
+- OTA firmware updates
+- Automatic firmware update checker
+- Data logging
+- Configurable display themes
 
 ---
 
-## License
+# License
 
 MIT License
 
 ---
 
-## Acknowledgements
+# Acknowledgements
 
-Special thanks to:
+Special thanks to
 
-* Infineon Technologies for the TLE5012 magnetic angle sensor
-* The RemoteXY project
-* The gem faceting community for inspiring this project
+- Infineon Technologies
+- The gem faceting community
+- Everyone contributing ideas and testing OpenDAD
 
 ---
 
-## Project Status
+# Project Status
 
-Current Version: **1.0**
+**Current Version:** 2.0 (Development)
 
-The hardware and software are fully functional and suitable for daily use on a faceting machine.
+OpenDAD has evolved from a Bluetooth/OLED prototype into a Wi-Fi connected digital instrument with a responsive web interface. The core angle measurement, calibration, and target functions are complete, and the project is now focused on polishing the user interface, battery operation, and enclosure design.
 
-Contributions, bug reports, and suggestions are always welcome.
+Contributions, testing, feature requests, and bug reports are welcome.
