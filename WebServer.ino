@@ -1,0 +1,343 @@
+/******************************************************************************
+  OpenDAD web server
+
+  Provides:
+    GET  /                  Basic OpenDAD test webpage
+    GET  /api/status        Current angle and calibration status
+    POST /api/calibrate/0   Save current position as 0 degrees
+    POST /api/calibrate/45  Save current position as 45 degrees
+    POST /api/calibrate/90  Save current position as 90 degrees
+    POST /api/reset         Clear calibration
+
+  The ESP32 built-in WebServer library handles one HTTP request at a time,
+  which is sufficient for the OpenDAD interface.
+******************************************************************************/
+
+#include <WebServer.h>
+
+/******************************************************************************
+  Web-server object
+******************************************************************************/
+
+WebServer server(80);
+
+/******************************************************************************
+  Current instrument state
+
+  loop() updates these values using updateWebState(). Web requests read them.
+******************************************************************************/
+
+struct WebInstrumentState
+{
+  uint16_t rawWord = 0;
+  float rawAngle = 0.0;
+  float displayAngle = 0.0;
+  bool sensorReady = false;
+};
+
+WebInstrumentState webState;
+
+/******************************************************************************
+  Web page
+
+  WEB_PAGE is defined in WebPage.ino. Arduino compiles all .ino tabs in the
+  sketch together.
+******************************************************************************/
+
+extern const char WEB_PAGE[] PROGMEM;
+
+
+/******************************************************************************
+  Instrument-state update
+
+  Call this from loop() after reading and processing the sensor.
+******************************************************************************/
+
+void updateWebState(
+  uint16_t rawWord,
+  float rawAngle,
+  float displayAngle)
+{
+  webState.rawWord = rawWord;
+  webState.rawAngle = rawAngle;
+  webState.displayAngle = displayAngle;
+  webState.sensorReady = true;
+}
+
+/******************************************************************************
+  HTTP response helpers
+******************************************************************************/
+
+void sendJsonResponse(const String& json, int statusCode = 200)
+{
+  server.sendHeader("Cache-Control", "no-store");
+  server.sendHeader("Pragma", "no-cache");
+  server.send(statusCode, "application/json", json);
+}
+
+void sendCommandResult(
+  bool success,
+  const char* message,
+  int statusCode = 200)
+{
+  String json;
+  json.reserve(100);
+
+  json += "{\"success\":";
+  json += success ? "true" : "false";
+  json += ",\"message\":\"";
+  json += message;
+  json += "\"}";
+
+  sendJsonResponse(json, statusCode);
+}
+
+/******************************************************************************
+  Web-page handler
+******************************************************************************/
+
+void handleRoot()
+{
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html", WEB_PAGE);
+}
+
+/******************************************************************************
+  Status API
+
+  Example response:
+
+  {
+    "angle": 42.18,
+    "rawAngle": 218.34,
+    "rawWord": 42763,
+    "rawHex": "A70B",
+    " cal0": true,
+    "cal45": true,
+    "cal90": false,
+    "calibrationComplete": false,
+    "sensorReady": true
+  }
+******************************************************************************/
+
+void handleApiStatus()
+{
+  char json[420];
+
+  const float targetDifference = getTargetDifference();
+
+  snprintf(
+    json,
+    sizeof(json),
+    "{"
+      "\"angle\":%.2f,"
+      "\"rawAngle\":%.2f,"
+      "\"rawWord\":%u,"
+      "\"rawHex\":\"%04X\","
+      "\"cal0\":%s,"
+      "\"cal45\":%s,"
+      "\"cal90\":%s,"
+      "\"calibrationComplete\":%s,"
+      "\"sensorReady\":%s,"
+      "\"connectedDevices\":%d,"
+      "\"targetSet\":%s,"
+      "\"target\":%.2f,"
+      "\"difference\":%.2f"
+    "}",
+    webState.displayAngle,
+    webState.rawAngle,
+    webState.rawWord,
+    webState.rawWord,
+    cal.has0 ? "true" : "false",
+    cal.has45 ? "true" : "false",
+    cal.has90 ? "true" : "false",
+    calibrationComplete() ? "true" : "false",
+    webState.sensorReady ? "true" : "false",
+    getConnectedDeviceCount(),
+    targetAngleSet ? "true" : "false",
+    targetAngle,
+    targetDifference
+  );
+
+  sendJsonResponse(String(json));
+}
+
+/******************************************************************************
+  Calibration API handlers
+******************************************************************************/
+
+void handleCalibrateZero()
+{
+  if (!webState.sensorReady)
+  {
+    sendCommandResult(
+      false,
+      "Sensor data is not available",
+      503
+    );
+    return;
+  }
+
+  setCalibrationPoint(webState.rawAngle, 0.0);
+  sendCommandResult(true, "Zero-degree calibration saved");
+}
+
+void handleCalibrateFortyFive()
+{
+  if (!webState.sensorReady)
+  {
+    sendCommandResult(
+      false,
+      "Sensor data is not available",
+      503
+    );
+    return;
+  }
+
+  setCalibrationPoint(webState.rawAngle, 45.0);
+  sendCommandResult(true, "Forty-five-degree calibration saved");
+}
+
+void handleCalibrateNinety()
+{
+  if (!webState.sensorReady)
+  {
+    sendCommandResult(
+      false,
+      "Sensor data is not available",
+      503
+    );
+    return;
+  }
+
+  setCalibrationPoint(webState.rawAngle, 90.0);
+  sendCommandResult(true, "Ninety-degree calibration saved");
+}
+
+void handleResetCalibration()
+{
+  resetCalibration();
+  sendCommandResult(true, "Calibration cleared");
+}
+
+/******************************************************************************
+  Target setting
+******************************************************************************/
+
+void handleSetTarget()
+{
+  setTargetToCurrentAngle();
+
+  String json = "{";
+  json += "\"success\":true,";
+  json += "\"target\":" + String(targetAngle, 2);
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
+
+
+void handleClearTarget()
+{
+  clearTargetAngle();
+
+  server.send(
+    200,
+    "application/json",
+    "{\"success\":true}"
+  );
+}
+
+
+
+
+
+/******************************************************************************
+  Not-found handler
+******************************************************************************/
+
+void handleNotFound()
+{
+  String json;
+  json.reserve(120);
+
+  json += "{\"success\":false,\"message\":\"Not found\",";
+  json += "\"path\":\"";
+  json += server.uri();
+  json += "\"}";
+
+  sendJsonResponse(json, 404);
+}
+
+/******************************************************************************
+  Start the HTTP server
+******************************************************************************/
+
+void setupWebServer()
+{
+  /*
+    GET routes
+  */
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/api/status", HTTP_GET, handleApiStatus);
+
+  /*
+    POST routes
+  */
+  server.on(
+    "/api/calibrate/0",
+    HTTP_POST,
+    handleCalibrateZero
+  );
+
+  server.on(
+    "/api/calibrate/45",
+    HTTP_POST,
+    handleCalibrateFortyFive
+  );
+
+  server.on(
+    "/api/calibrate/90",
+    HTTP_POST,
+    handleCalibrateNinety
+  );
+
+  server.on(
+    "/api/reset",
+    HTTP_POST,
+    handleResetCalibration
+  );
+
+  server.on(
+    "/api/target",
+    HTTP_POST,
+    handleSetTarget
+  );
+  
+  server.on(
+    "/api/target/clear",
+    HTTP_POST,
+    handleClearTarget
+  );
+
+
+  server.onNotFound(handleNotFound);
+
+  server.begin();
+
+  Serial.println();
+  Serial.println("OpenDAD web server started");
+  Serial.print("Open http://");
+  Serial.println(WiFi.softAPIP());
+}
+
+/******************************************************************************
+  Process incoming web requests
+
+  Call frequently from loop().
+******************************************************************************/
+
+void handleWebServer()
+{
+  server.handleClient();
+}
