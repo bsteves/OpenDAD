@@ -21,8 +21,8 @@ Unlike commercial DADs costing several hundred dollars, OpenDAD is inexpensive, 
 - Previous/next facet-tier navigation
 - Facet index positions displayed in the tier list and for the selected target
 - Import of GemCad ASC and Gem Cut Studio GCS faceting designs
-- Three orthographic design previews for GCS files: crown/top, side, and pavilion/bottom
-- Selected-tier highlighting in the GCS previews
+- Interactive perspective 3D gemstone viewer for GCS files, with drag-to-rotate and scroll-to-zoom controls
+- Selected-tier highlighting in the 3D gemstone viewer
 - Exponential smoothing of angle readings
 - Screen Wake Lock request in supported browsers
 - REST API for status, calibration, and target control
@@ -93,7 +93,7 @@ Use the **Faceting design** file chooser to load a local `.asc` or `.gcs` design
 
 Supported formats:
 
-- **GemCad ASC (`.asc`)** — tier names, angles, and index positions are parsed from the design instructions. ASC files do not provide the 3D vertex geometry used by the preview, so the geometry views display an explanatory message for ASC designs.
+- **GemCad ASC (`.asc`)** — tier names, angles, and index positions are parsed from the design instructions. ASC files do not provide the 3D vertex geometry used by the viewer, so ASC designs load their tier list without a 3D model.
 - **Gem Cut Studio GCS (`.gcs`)** — tier names, angles, index positions, instructions, and facet vertex coordinates are read from the XML design. The index gear is read from the file; a default of 96 is used if it is not specified.
 
 The tier list groups entries as Crown, Girdle, or Pavilion based on their tier names. The Table tier (`T`) is not selectable for target setting or adjacent-tier navigation.
@@ -102,22 +102,23 @@ The tier list groups entries as Crown, Girdle, or Pavilion based on their tier n
 
 Select a tier in the list, or use the left/right arrow controls to move to the previous or next selectable tier. Selecting a tier:
 
-1. Highlights that tier in the GCS geometry previews, when geometry is available.
+1. Highlights that tier in the 3D GCS model, when geometry is available.
 2. Displays its angle as the target angle.
 3. Displays the tier's index positions beneath the target angle.
 4. Updates the live difference display as the machine approaches the target.
 
 The manual **Set Target** button remains available and sets the target to the current measured angle. **Clear** removes the target.
 
-### Design views
+### 3D gemstone viewer
 
-GCS designs with vertex geometry are drawn as three orthographic projections:
+GCS designs with vertex geometry are rendered as an interactive perspective model using the browser's built-in Canvas 2D API. The viewer uses the original XYZ vertex coordinates for each facet, depth-sorts the polygons, and applies simple directional shading.
 
-- **Face / top (X–Y):** crown facets only; pavilion facets are filtered out.
-- **Side (X–Z):** all facet groups are shown to illustrate the stone profile.
-- **Bottom / underside:** pavilion facets only; crown facets are filtered out. The Y direction is reversed to represent viewing from below.
+- **Drag** the gemstone to rotate it and inspect the crown, girdle, and pavilion from different directions.
+- **Scroll** over the model to zoom in or out. On touch devices, drag to rotate; pinch zoom depends on browser gesture handling.
+- Use **Reset view** to return to the default orientation and zoom.
+- The currently selected tier is highlighted in amber; other facets are shaded by group and orientation.
 
-The selected tier is highlighted in the views. These are simplified projections of the GCS facet polygons, not a full 3D interactive model. Girdle facets are not included in the top or bottom view filters.
+The viewer is self-contained and does not require an internet connection, a third-party JavaScript library, or additional ESP32 resources beyond serving the web page. GemCad ASC files contain no 3D vertex geometry, so they can show tier information but cannot produce a 3D model. The canvas renderer is a lightweight faceted preview rather than a physically accurate optical/ray-traced gemstone simulation.
 
 ---
 
@@ -256,7 +257,7 @@ WebPage.ino       Embedded HTML, CSS, and JavaScript interface
 - `Preferences` (included with the ESP32 Arduino core)
 - `WebServer` (included with the ESP32 Arduino core)
 
-No external web-server or JavaScript libraries are required by the current interface. The browser uses built-in APIs, including `DOMParser` for GCS XML parsing and SVG for the design previews.
+No external web-server or JavaScript libraries are required by the current interface. The browser uses built-in APIs, including `DOMParser` for GCS XML parsing and Canvas 2D for the interactive 3D facet viewer.
 
 ---
 
@@ -313,6 +314,6 @@ Special thanks to:
 
 **Current Version:** 2.0 (Development)
 
-OpenDAD has evolved from an earlier Bluetooth/OLED prototype into a Wi-Fi-connected digital instrument with a responsive browser interface. The current development includes local GemCad ASC and Gem Cut Studio GCS design import, facet-tier target selection, index-position display, and three-view GCS geometry previews. Hardware validation, battery/enclosure refinements, and continued interface testing remain ongoing.
+OpenDAD has evolved from an earlier Bluetooth/OLED prototype into a Wi-Fi-connected digital instrument with a responsive browser interface. The current development includes local GemCad ASC and Gem Cut Studio GCS design import, facet-tier target selection, index-position display, and an interactive, rotatable 3D GCS geometry viewer. Hardware validation, battery/enclosure refinements, and continued interface testing remain ongoing.
 
 Contributions, testing, feature requests, and bug reports are welcome.

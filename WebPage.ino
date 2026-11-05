@@ -298,34 +298,42 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       border-radius: 10px;
     }
 
-    .diagram-views {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
-
-    .diagram-view {
-      min-width: 0;
-      padding: 6px;
+    .gem-view-wrap {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
       border: 1px solid #333;
       border-radius: 8px;
-      background: #141414;
+      background: radial-gradient(ellipse at 50% 42%, #263442 0%, #111820 72%);
+      touch-action: none;
     }
 
-    .diagram-view-title {
-      margin: 0 0 3px;
-      color: #bbb;
-      font-size: .72rem;
-      text-align: center;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-    }
-
-    .design-view {
+    #gem3d {
       display: block;
       width: 100%;
-      height: auto;
-      aspect-ratio: 3 / 2;
+      height: 360px;
+      cursor: grab;
+      touch-action: none;
+    }
+    #gem3d:active { cursor: grabbing; }
+
+    .gem-view-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: #999;
+      font-size: .72rem;
+    }
+    .gem-view-controls button {
+      border: 1px solid #52677a;
+      border-radius: 6px;
+      padding: 5px 9px;
+      color: #ddd;
+      background: #263442;
+      cursor: pointer;
     }
 
     .diagram-caption {
@@ -405,12 +413,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       .design-content {
         grid-template-columns: 1fr;
       }
-      .diagram-views {
-        grid-template-columns: 1fr;
-      }
-      .design-view {
-        max-height: 220px;
-      }
+      #gem3d { height: 280px; }
     }
 
     @media (max-width: 390px) {
@@ -500,31 +503,17 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       </div>
       <div class="design-content">
         <div class="diagram-panel">
-          <div class="diagram-views">
-            <div class="diagram-view">
-              <div class="diagram-view-title">Face / top view (X–Y)</div>
-              <svg id="designDiagram" class="design-view" viewBox="0 0 300 200"
-                   role="img" aria-label="Top view of faceting design">
-                <text x="150" y="100" fill="#888" text-anchor="middle" font-size="12">Diagram appears here</text>
-              </svg>
-            </div>
-            <div class="diagram-view">
-              <div class="diagram-view-title">Side view (X–Z)</div>
-              <svg id="sideDiagram" class="design-view" viewBox="0 0 300 200"
-                   role="img" aria-label="Side view of faceting design">
-                <text x="150" y="100" fill="#888" text-anchor="middle" font-size="12">Side view appears here</text>
-              </svg>
-            </div>
-            <div class="diagram-view">
-              <div class="diagram-view-title">Bottom view (underside)</div>
-              <svg id="bottomDiagram" class="design-view" viewBox="0 0 300 200"
-                   role="img" aria-label="Bottom view of faceting design">
-                <text x="150" y="100" fill="#888" text-anchor="middle" font-size="12">Bottom view appears here</text>
-              </svg>
-            </div>
+          <div class="gem-view-wrap">
+            <canvas id="gem3d" aria-label="Interactive rotatable 3D gemstone model">
+              Your browser does not support canvas rendering.
+            </canvas>
+          </div>
+          <div class="gem-view-controls">
+            <span>Drag to rotate · scroll/pinch to zoom</span>
+            <button type="button" id="resetGemView">Reset view</button>
           </div>
           <div id="diagramCaption" class="diagram-caption">
-            GCS geometry preview · three orthographic projections
+            Interactive 3D GCS facet model
           </div>
         </div>
         <div id="facetGroups" class="facet-groups">
@@ -787,10 +776,10 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     const designMeta = document.getElementById("designMeta");
     const facetGroupsElement = document.getElementById("facetGroups");
     const designStatus = document.getElementById("designStatus");
-    const designDiagram = document.getElementById("designDiagram");
-    const sideDiagram = document.getElementById("sideDiagram");
-    const bottomDiagram = document.getElementById("bottomDiagram");
+    const gemCanvas = document.getElementById("gem3d");
+    const gemContext = gemCanvas.getContext("2d");
     const diagramCaption = document.getElementById("diagramCaption");
+    const resetGemViewButton = document.getElementById("resetGemView");
 
     let designFacets = [];
     let currentDesignGeometry = null;
@@ -917,7 +906,12 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
             .filter(v => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z));
           // Keep the tier name with each polygon so the selected tier can
           // be highlighted consistently in every projection.
-          if (vertices.length >= 3) geometry.push({ name, group: facetGroup(name), vertices });
+          const normal = {
+            x: Number(facet.getAttribute("nx")) || 0,
+            y: Number(facet.getAttribute("ny")) || 0,
+            z: Number(facet.getAttribute("nz")) || 0
+          };
+          if (vertices.length >= 3) geometry.push({ name, group: facetGroup(name), vertices, normal });
         }
 
         facets.push({
@@ -938,84 +932,138 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       };
     }
 
-    // Draw the same 3D facet polygons from three orthographic directions.
-    // Face/top uses X-Y, side uses X-Z, and bottom looks upward from below.
-    function drawGcsDiagram(polygons, selectedName = selectedFacetName) {
-      const views = [
-        // Looking down from the crown: hide pavilion facets beneath the stone.
-        { svg: designDiagram, group: "Crown", project: p => ({ x: p.x, y: p.y }) },
-        // The side view retains every tier so the complete profile is visible.
-        { svg: sideDiagram, group: null, project: p => ({ x: p.x, y: p.z }) },
-        // Looking up from the pavilion: hide crown facets above the stone.
-        { svg: bottomDiagram, group: "Pavilion", project: p => ({ x: p.x, y: -p.y }) }
-      ];
+    // Interactive 3D renderer. It projects the original GCS XYZ vertices into
+    // a perspective canvas, depth-sorts the facets, and shades each face.
+    let gemRotationX = -0.62;
+    let gemRotationY = 0.55;
+    let gemZoom = 1;
+    let gemDragging = false;
+    let gemLastPointer = null;
+    let gemGeometry = null;
 
-      if (!polygons || !polygons.length) {
-        for (const view of views) {
-          view.svg.replaceChildren();
-          const message = document.createElementNS("http://www.w3.org/2000/svg", "text");
-          message.setAttribute("x", "150");
-          message.setAttribute("y", "100");
-          message.setAttribute("fill", "#888");
-          message.setAttribute("text-anchor", "middle");
-          message.setAttribute("font-size", "12");
-          message.textContent = "No geometry available";
-          view.svg.appendChild(message);
-        }
-        diagramCaption.textContent = "No diagram geometry in this file";
+    function resizeGemCanvas() {
+      const rect = gemCanvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.round(rect.width * dpr);
+      const height = Math.round(rect.height * dpr);
+      if (gemCanvas.width !== width || gemCanvas.height !== height) {
+        gemCanvas.width = width;
+        gemCanvas.height = height;
+      }
+      drawGem3d();
+    }
+
+    function rotatePoint(point) {
+      const cy = Math.cos(gemRotationY), sy = Math.sin(gemRotationY);
+      const cx = Math.cos(gemRotationX), sx = Math.sin(gemRotationX);
+      const x1 = point.x * cy + point.z * sy;
+      const z1 = -point.x * sy + point.z * cy;
+      const y2 = point.y * cx - z1 * sx;
+      const z2 = point.y * sx + z1 * cx;
+      return { x: x1, y: y2, z: z2 };
+    }
+
+    function drawGem3d() {
+      if (!gemContext || !gemCanvas.width || !gemCanvas.height) return;
+      const ctx = gemContext;
+      const width = gemCanvas.width, height = gemCanvas.height;
+      ctx.clearRect(0, 0, width, height);
+      if (!gemGeometry || !gemGeometry.length) {
+        ctx.fillStyle = "#9aa8b5";
+        ctx.font = `${14 * (window.devicePixelRatio || 1)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText("Load a GCS design to view the 3D gemstone", width / 2, height / 2);
         return;
       }
 
-      for (const view of views) {
-        const visiblePolygons = view.group
-          ? polygons.filter(polygon => (polygon.group || facetGroup(polygon.name)) === view.group)
-          : polygons;
-        const projected = visiblePolygons.map(polygon => ({
-          name: polygon.name,
-          points: polygon.vertices.map(view.project)
-        }));
-        const all = projected.flatMap(polygon => polygon.points);
-        const minX = Math.min(...all.map(p => p.x));
-        const maxX = Math.max(...all.map(p => p.x));
-        const minY = Math.min(...all.map(p => p.y));
-        const maxY = Math.max(...all.map(p => p.y));
-        const spanX = maxX - minX;
-        const spanY = maxY - minY;
-        const padding = 18;
-        const usableWidth = 300 - padding * 2;
-        const usableHeight = 200 - padding * 2;
+      const allPoints = gemGeometry.flatMap(poly => poly.vertices);
+      const center = {
+        x: (Math.min(...allPoints.map(p => p.x)) + Math.max(...allPoints.map(p => p.x))) / 2,
+        y: (Math.min(...allPoints.map(p => p.y)) + Math.max(...allPoints.map(p => p.y))) / 2,
+        z: (Math.min(...allPoints.map(p => p.z)) + Math.max(...allPoints.map(p => p.z))) / 2
+      };
+      // Fit the complete model inside a bounding sphere. Keep the camera and
+      // vertices in the same world units; the previous version mixed pixel
+      // scale into the camera depth calculation and magnified the model twice.
+      const extent = Math.max(...allPoints.map(p => Math.hypot(p.x-center.x, p.y-center.y, p.z-center.z))) || 1;
+      const cameraDistance = extent * 4.5;
+      const focal = Math.min(width, height) * 1.35 * gemZoom;
 
-        // Guard against a flat/degenerate projection (for example, missing Z values).
-        const scaleX = spanX > 0 ? usableWidth / spanX : Infinity;
-        const scaleY = spanY > 0 ? usableHeight / spanY : Infinity;
-        const scale = Math.min(scaleX, scaleY);
-        if (!Number.isFinite(scale) || scale <= 0) {
-          view.svg.replaceChildren();
-          continue;
-        }
+      const projected = gemGeometry.map(poly => {
+        const points = poly.vertices.map(vertex => {
+          const p = rotatePoint({ x: vertex.x-center.x, y: vertex.y-center.y, z: vertex.z-center.z });
+          const depth = Math.max(extent * 0.5, cameraDistance - p.z);
+          return { x: width/2 + p.x*focal/depth, y: height/2 - p.y*focal/depth, z: p.z };
+        });
+        const avgDepth = points.reduce((sum, p) => sum + p.z, 0) / points.length;
+        const isSelected = selectedFacetName !== null && poly.name === selectedFacetName;
+        // Unselected tiers share a neutral gray treatment; only the active
+        // tier uses amber so it remains obvious while the model is rotated.
+        const groupColor = [145, 151, 158];
+        const n = poly.normal || {x:0,y:0,z:1};
+        const rn = rotatePoint(n);
+        const light = Math.max(0.22, Math.abs(rn.x * -0.35 + rn.y * 0.55 + rn.z * 0.76));
+        return { points, avgDepth, isSelected, groupColor, light };
+      }).sort((a, b) => a.avgDepth - b.avgDepth);
 
-        const offsetX = (300 - spanX * scale) / 2;
-        const offsetY = (200 - spanY * scale) / 2;
-        view.svg.replaceChildren();
-
-        for (const polygon of projected) {
-          const points = polygon.points.map(p =>
-            `${(p.x - minX) * scale + offsetX},${(maxY - p.y) * scale + offsetY}`
-          ).join(" ");
-          const shape = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-          shape.setAttribute("points", points);
-          const isSelected = selectedName !== null && polygon.name === selectedName;
-          shape.setAttribute("fill", isSelected ? "#f59e0b" : "#52677a");
-          shape.setAttribute("fill-opacity", isSelected ? "0.88" : "0.30");
-          shape.setAttribute("stroke", isSelected ? "#fff1b8" : "#91a4b5");
-          shape.setAttribute("stroke-width", isSelected ? "2.0" : "0.9");
-          shape.setAttribute("vector-effect", "non-scaling-stroke");
-          view.svg.appendChild(shape);
-        }
+      for (const face of projected) {
+        if (face.points.length < 3) continue;
+        const [r,g,b] = face.groupColor;
+        const shade = face.isSelected ? 1 : Math.max(0.42, face.light);
+        ctx.beginPath();
+        ctx.moveTo(face.points[0].x, face.points[0].y);
+        for (let i=1; i<face.points.length; i++) ctx.lineTo(face.points[i].x, face.points[i].y);
+        ctx.closePath();
+        ctx.fillStyle = face.isSelected ? "rgba(245,158,11,0.96)" :
+          `rgba(${Math.round(r*shade)},${Math.round(g*shade)},${Math.round(b*shade)},0.96)`;
+        ctx.fill();
+        ctx.strokeStyle = face.isSelected ? "#fff0b5" : "rgba(210,228,240,0.72)";
+        ctx.lineWidth = (face.isSelected ? 2 : 0.8) * (window.devicePixelRatio || 1);
+        ctx.stroke();
       }
-
-      diagramCaption.textContent = "GCS geometry · crown from above, full side profile, pavilion from below";
     }
+
+    function drawGcsDiagram(polygons, selectedName = selectedFacetName) {
+      gemGeometry = polygons || null;
+      selectedFacetName = selectedName;
+      resizeGemCanvas();
+      diagramCaption.textContent = polygons && polygons.length
+        ? "GCS 3D geometry · selected tier highlighted · drag to rotate"
+        : "No 3D geometry available in this file";
+    }
+
+    gemCanvas.addEventListener("pointerdown", event => {
+      gemDragging = true;
+      gemLastPointer = { x: event.clientX, y: event.clientY };
+      gemCanvas.setPointerCapture(event.pointerId);
+    });
+    gemCanvas.addEventListener("pointermove", event => {
+      if (!gemDragging || !gemLastPointer) return;
+      const dx = event.clientX - gemLastPointer.x;
+      const dy = event.clientY - gemLastPointer.y;
+      gemRotationY += dx * 0.009;
+      gemRotationX = Math.max(-Math.PI, Math.min(Math.PI, gemRotationX + dy * 0.009));
+      gemLastPointer = { x: event.clientX, y: event.clientY };
+      drawGem3d();
+    });
+    function stopGemDrag() { gemDragging = false; gemLastPointer = null; }
+    gemCanvas.addEventListener("pointerup", stopGemDrag);
+    gemCanvas.addEventListener("pointercancel", stopGemDrag);
+    gemCanvas.addEventListener("wheel", event => {
+      event.preventDefault();
+      gemZoom = Math.max(0.55, Math.min(3.2, gemZoom * (event.deltaY < 0 ? 1.1 : 0.91)));
+      drawGem3d();
+    }, { passive: false });
+    resetGemViewButton.addEventListener("click", () => {
+      gemRotationX = -0.62;
+      gemRotationY = 0.55;
+      gemZoom = 1;
+      drawGem3d();
+    });
+    window.addEventListener("resize", resizeGemCanvas);
+    if (window.ResizeObserver) new ResizeObserver(resizeGemCanvas).observe(gemCanvas);
+    resizeGemCanvas();
 
     function renderFacetList() {
       facetGroupsElement.replaceChildren();
@@ -1120,24 +1168,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
 
         if (parsed.geometry) drawGcsDiagram(parsed.geometry, selectedFacetName);
         else {
-          for (const view of [designDiagram, sideDiagram, bottomDiagram]) {
-            view.replaceChildren();
-            const line1 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            line1.setAttribute("x", "150");
-            line1.setAttribute("y", "92");
-            line1.setAttribute("fill", "#aaa");
-            line1.setAttribute("text-anchor", "middle");
-            line1.setAttribute("font-size", "13");
-            line1.textContent = "ASC facet list";
-            const line2 = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            line2.setAttribute("x", "150");
-            line2.setAttribute("y", "110");
-            line2.setAttribute("fill", "#777");
-            line2.setAttribute("text-anchor", "middle");
-            line2.setAttribute("font-size", "10");
-            line2.textContent = "Geometry not stored in ASC";
-            view.append(line1, line2);
-          }
+          drawGcsDiagram(null, null);
           diagramCaption.textContent = "ASC contains facet instructions, not 3D geometry";
         }
 
