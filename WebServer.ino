@@ -14,6 +14,8 @@
 ******************************************************************************/
 
 #include <WebServer.h>
+#include <stdlib.h>
+#include <math.h>
 
 /******************************************************************************
   Web-server object
@@ -226,14 +228,57 @@ void handleResetCalibration()
 
 void handleSetTarget()
 {
-  setTargetToCurrentAngle();
+  // A supplied angle is used when the user selects a facet tier from
+  // an imported ASC/GCS design. Without an angle, retain the original
+  // behavior of setting the target to the current instrument angle.
+  if (server.hasArg("angle"))
+  {
+    String angleText = server.arg("angle");
+    angleText.trim();
+
+    if (angleText.length() == 0)
+    {
+      sendCommandResult(false, "Missing target angle", 400);
+      return;
+    }
+
+    // Reject malformed values instead of allowing String::toFloat()
+    // to silently turn them into 0 degrees.
+    char *endPointer = nullptr;
+    float requestedAngle = strtof(angleText.c_str(), &endPointer);
+    if (endPointer == angleText.c_str() || *endPointer != '\0' ||
+        !isfinite(requestedAngle))
+    {
+      sendCommandResult(false, "Invalid target angle", 400);
+      return;
+    }
+
+    // Faceting target angles are expressed from 0 through 90 degrees.
+    if (requestedAngle < 0.0f || requestedAngle > 90.0f)
+    {
+      sendCommandResult(
+        false,
+        "Target angle must be between 0 and 90 degrees",
+        400
+      );
+      return;
+    }
+
+    targetAngle = requestedAngle;
+    targetAngleSet = true;
+  }
+  else
+  {
+    // Preserve the manual Set Target button behavior.
+    setTargetToCurrentAngle();
+  }
 
   String json = "{";
   json += "\"success\":true,";
   json += "\"target\":" + String(targetAngle, 2);
   json += "}";
 
-  server.send(200, "application/json", json);
+  sendJsonResponse(json);
 }
 
 

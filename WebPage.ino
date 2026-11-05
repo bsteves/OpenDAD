@@ -86,6 +86,38 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       font-weight: bold;
     }
 
+    .target-indices {
+      min-height: 1.25em;
+      margin-top: 5px;
+      color: #cbd5e1;
+      font-size: .9rem;
+      line-height: 1.35;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tier-navigation {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      margin-top: 9px;
+    }
+
+    .tier-nav-button {
+      width: 42px;
+      height: 34px;
+      padding: 0;
+      background: #4b5563;
+      color: #fff;
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    .tier-nav-button:disabled {
+      opacity: .3;
+      cursor: default;
+    }
+
     .difference-label {
       margin-top: 15px;
       color: #bdbdbd;
@@ -218,6 +250,169 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       font-size: 0.9rem;
     }
 
+
+    .design-section {
+      margin-top: 22px;
+      padding: 16px;
+      border: 1px solid #3a3a3a;
+      border-radius: 14px;
+      background: #222222;
+      text-align: left;
+    }
+
+    .design-upload {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .file-input {
+      width: 100%;
+      padding: 10px;
+      border: 1px dashed #666;
+      border-radius: 8px;
+      color: #ddd;
+      background: #181818;
+    }
+
+    .design-meta {
+      color: #aaa;
+      font-size: .85rem;
+      margin: 8px 0 14px;
+      overflow-wrap: anywhere;
+    }
+
+    .design-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .diagram-panel {
+      min-width: 0;
+      padding: 8px;
+      background: #181818;
+      border-radius: 10px;
+    }
+
+    .diagram-views {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .diagram-view {
+      min-width: 0;
+      padding: 6px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #141414;
+    }
+
+    .diagram-view-title {
+      margin: 0 0 3px;
+      color: #bbb;
+      font-size: .72rem;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .design-view {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 3 / 2;
+    }
+
+    .diagram-caption {
+      color: #999;
+      font-size: .75rem;
+      text-align: center;
+      margin-top: 5px;
+    }
+
+    .facet-groups {
+      min-width: 0;
+    }
+
+    .facet-group-title {
+      margin: 5px 0 7px;
+      color: #aaa;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .facet-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      margin: 0 0 6px;
+      padding: 10px;
+      border: 1px solid #444;
+      background: #303030;
+      color: #fff;
+      text-align: left;
+      font-size: .95rem;
+    }
+
+    .facet-row.selected {
+      border-color: #60a5fa;
+      background: #164e80;
+    }
+
+    .facet-row:disabled {
+      opacity: .45;
+      cursor: default;
+    }
+
+    .facet-values {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .facet-angle {
+      font-variant-numeric: tabular-nums;
+      font-weight: bold;
+    }
+
+    .facet-indices {
+      color: #cbd5e1;
+      font-size: .68rem;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    #designStatus {
+      min-height: 1.2em;
+      margin-top: 10px;
+      color: #aaa;
+      font-size: .82rem;
+    }
+
+    @media (max-width: 430px) {
+      .design-content {
+        grid-template-columns: 1fr;
+      }
+      .diagram-views {
+        grid-template-columns: 1fr;
+      }
+      .design-view {
+        max-height: 220px;
+      }
+    }
+
     @media (max-width: 390px) {
       body {
         padding: 12px;
@@ -261,6 +456,13 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     <div class="target-panel">
       <div class="target-label">Target angle</div>
       <div id="targetAngle" class="target-angle">Not set</div>
+      <div id="targetIndices" class="target-indices"></div>
+      <div class="tier-navigation" aria-label="Select adjacent facet tier">
+        <button id="previousTierButton" class="tier-nav-button"
+                type="button" title="Previous tier" aria-label="Previous tier" disabled>&lt;</button>
+        <button id="nextTierButton" class="tier-nav-button"
+                type="button" title="Next tier" aria-label="Next tier" disabled>&gt;</button>
+      </div>
 
       <div class="difference-label">Difference</div>
       <strong
@@ -281,6 +483,56 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         </button>
       </div>
     </div>
+
+
+    <section class="design-section">
+      <div class="section-label">Faceting design</div>
+      <div class="design-upload">
+        <input
+          id="designFile"
+          class="file-input"
+          type="file"
+          accept=".asc,.gcs"
+        >
+      </div>
+      <div id="designMeta" class="design-meta">
+        Load a GemCad ASC or Gem Cut Studio GCS design.
+      </div>
+      <div class="design-content">
+        <div class="diagram-panel">
+          <div class="diagram-views">
+            <div class="diagram-view">
+              <div class="diagram-view-title">Face / top view (X–Y)</div>
+              <svg id="designDiagram" class="design-view" viewBox="0 0 300 200"
+                   role="img" aria-label="Top view of faceting design">
+                <text x="150" y="100" fill="#888" text-anchor="middle" font-size="12">Diagram appears here</text>
+              </svg>
+            </div>
+            <div class="diagram-view">
+              <div class="diagram-view-title">Side view (X–Z)</div>
+              <svg id="sideDiagram" class="design-view" viewBox="0 0 300 200"
+                   role="img" aria-label="Side view of faceting design">
+                <text x="150" y="100" fill="#888" text-anchor="middle" font-size="12">Side view appears here</text>
+              </svg>
+            </div>
+            <div class="diagram-view">
+              <div class="diagram-view-title">Bottom view (underside)</div>
+              <svg id="bottomDiagram" class="design-view" viewBox="0 0 300 200"
+                   role="img" aria-label="Bottom view of faceting design">
+                <text x="150" y="100" fill="#888" text-anchor="middle" font-size="12">Bottom view appears here</text>
+              </svg>
+            </div>
+          </div>
+          <div id="diagramCaption" class="diagram-caption">
+            GCS geometry preview · three orthographic projections
+          </div>
+        </div>
+        <div id="facetGroups" class="facet-groups">
+          <div class="diagram-caption">Facet tiers will appear here.</div>
+        </div>
+      </div>
+      <div id="designStatus" aria-live="polite"></div>
+    </section>
 
     <div class="calibration-section">
       <div class="section-label">Calibration</div>
@@ -320,8 +572,14 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     const differenceElement =
       document.getElementById("angleDifference");
 
+    const targetIndicesElement =
+      document.getElementById("targetIndices");
+
     const connectionElement =
       document.getElementById("connection");
+
+    const previousTierButton = document.getElementById("previousTierButton");
+    const nextTierButton = document.getElementById("nextTierButton");
 
 
     async function updateStatus()
@@ -348,6 +606,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         if (!status.targetSet)
         {
           targetElement.textContent = "Not set";
+          targetIndicesElement.textContent = "";
           differenceElement.textContent = "—";
           differenceElement.className = "difference unset";
         }
@@ -407,6 +666,9 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
           throw new Error("Unable to set target");
         }
 
+        targetIndicesElement.textContent = "";
+        selectedFacetName = null;
+        renderFacetList();
         await updateStatus();
       }
       catch (error)
@@ -429,6 +691,9 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
           throw new Error("Unable to clear target");
         }
 
+        targetIndicesElement.textContent = "";
+        selectedFacetName = null;
+        renderFacetList();
         await updateStatus();
       }
       catch (error)
@@ -511,6 +776,378 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
 
 
 
+
+
+
+    // ---------------------------------------------------------------
+    // Faceting design import: GemCad ASC and Gem Cut Studio GCS
+    // ---------------------------------------------------------------
+
+    const designFileInput = document.getElementById("designFile");
+    const designMeta = document.getElementById("designMeta");
+    const facetGroupsElement = document.getElementById("facetGroups");
+    const designStatus = document.getElementById("designStatus");
+    const designDiagram = document.getElementById("designDiagram");
+    const sideDiagram = document.getElementById("sideDiagram");
+    const bottomDiagram = document.getElementById("bottomDiagram");
+    const diagramCaption = document.getElementById("diagramCaption");
+
+    let designFacets = [];
+    let currentDesignGeometry = null;
+    let selectedFacetName = null;
+
+    function selectableFacets() {
+      return designFacets.filter(facet => facet.name.toUpperCase() !== "T");
+    }
+
+    function updateTierNavigation() {
+      const tiers = selectableFacets();
+      const selectedIndex = tiers.findIndex(facet => facet.name === selectedFacetName);
+      previousTierButton.disabled = selectedIndex <= 0;
+      nextTierButton.disabled = selectedIndex < 0 || selectedIndex >= tiers.length - 1;
+    }
+
+    async function moveTier(offset) {
+      const tiers = selectableFacets();
+      const selectedIndex = tiers.findIndex(facet => facet.name === selectedFacetName);
+      if (selectedIndex < 0) return;
+      const nextIndex = selectedIndex + offset;
+      if (nextIndex < 0 || nextIndex >= tiers.length) return;
+      await selectDesignFacet(tiers[nextIndex]);
+    }
+
+    previousTierButton.addEventListener("click", () => moveTier(-1));
+    nextTierButton.addEventListener("click", () => moveTier(1));
+
+    function facetGroup(name) {
+      if (/^G/i.test(name)) return "Girdle";
+      if (/^[0-9]/.test(name)) return "Pavilion";
+      return "Crown";
+    }
+
+    function normalizeIndices(values, gear) {
+      const cleaned = values
+        .filter(value => Number.isFinite(value))
+        .map(value => ((Math.round(value) % gear) + gear) % gear);
+      return Array.from(new Set(cleaned)).sort((a, b) => a - b);
+    }
+
+    function parseAsc(text) {
+      const facets = [];
+      let title = "";
+      let indexGear = 96;
+
+      for (const line of text.split(/\r?\n/)) {
+        const header = line.match(/^H\s+(.+)$/);
+        if (header && !title) title = header[1].trim();
+        const gearMatch = line.match(/^g\s+(\d+)/i);
+        if (gearMatch) indexGear = Number(gearMatch[1]) || indexGear;
+
+        // GemCad tier record: a <angle> <depth> [indexes] n <name> [indexes] G ...
+        if (!/^a\s/i.test(line)) continue;
+        const tokens = line.trim().split(/\s+/);
+        const nIndex = tokens.indexOf("n");
+        if (nIndex < 0 || !tokens[nIndex + 1]) continue;
+
+        const storedAngle = Number(tokens[1]);
+        if (!Number.isFinite(storedAngle)) continue;
+
+        const name = tokens[nIndex + 1];
+        const indexValues = [];
+        // Index positions can occur on either side of the "n <tier>" marker.
+        for (const token of tokens.slice(3, nIndex)) {
+          if (/^\d+$/.test(token)) indexValues.push(Number(token));
+        }
+        const gIndex = tokens.indexOf("G", nIndex + 2);
+        const afterName = tokens.slice(nIndex + 2, gIndex < 0 ? tokens.length : gIndex);
+        for (const token of afterName) {
+          if (/^\d+$/.test(token)) indexValues.push(Number(token));
+        }
+
+        facets.push({
+          name,
+          angle: Math.abs(storedAngle),
+          indices: normalizeIndices(indexValues, indexGear),
+          group: facetGroup(name),
+          instructions: ""
+        });
+      }
+
+      return { title: title || "Imported ASC design", facets, geometry: null, format: "ASC", indexGear };
+    }
+
+    function parseGcs(text) {
+      const xml = new DOMParser().parseFromString(text, "application/xml");
+      if (xml.querySelector("parsererror")) {
+        throw new Error("This GCS file could not be read as XML.");
+      }
+
+      const root = xml.querySelector("GemCutStudio");
+      if (!root) throw new Error("This does not look like a Gem Cut Studio file.");
+
+      const facets = [];
+      const geometry = [];
+      const indexElement = root.querySelector("index");
+      const indexGear = Number(indexElement && indexElement.getAttribute("gear")) || 96;
+      const degreesPerIndex = 360 / indexGear;
+      const tiers = Array.from(xml.querySelectorAll("tier"));
+
+      for (const tier of tiers) {
+        const name = tier.getAttribute("name") || "?";
+        const storedAngle = Number(tier.getAttribute("angle"));
+        if (!Number.isFinite(storedAngle)) continue;
+
+        // GCS stores pavilion angles as supplements (e.g. 134.47 -> 45.53).
+        const angle = storedAngle > 90 ? 180 - storedAngle : storedAngle;
+        const facetData = Array.from(tier.querySelectorAll(":scope > facet"));
+        const indexValues = [];
+
+        for (const facet of facetData) {
+          const indexAngle = Number(facet.getAttribute("index_angle"));
+          if (Number.isFinite(indexAngle)) {
+            indexValues.push(Math.round(indexAngle / degreesPerIndex));
+          }
+
+          const vertices = Array.from(facet.querySelectorAll("vertex"))
+            .map(v => ({
+              x: Number(v.getAttribute("x")),
+              y: Number(v.getAttribute("y")),
+              z: Number(v.getAttribute("z"))
+            }))
+            .filter(v => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z));
+          // Keep the tier name with each polygon so the selected tier can
+          // be highlighted consistently in every projection.
+          if (vertices.length >= 3) geometry.push({ name, group: facetGroup(name), vertices });
+        }
+
+        facets.push({
+          name,
+          angle,
+          indices: normalizeIndices(indexValues, indexGear),
+          group: facetGroup(name),
+          instructions: tier.getAttribute("instructions") || ""
+        });
+      }
+
+      return {
+        title: "Gem Cut Studio design",
+        facets,
+        geometry,
+        format: "GCS",
+        indexGear
+      };
+    }
+
+    // Draw the same 3D facet polygons from three orthographic directions.
+    // Face/top uses X-Y, side uses X-Z, and bottom looks upward from below.
+    function drawGcsDiagram(polygons, selectedName = selectedFacetName) {
+      const views = [
+        // Looking down from the crown: hide pavilion facets beneath the stone.
+        { svg: designDiagram, group: "Crown", project: p => ({ x: p.x, y: p.y }) },
+        // The side view retains every tier so the complete profile is visible.
+        { svg: sideDiagram, group: null, project: p => ({ x: p.x, y: p.z }) },
+        // Looking up from the pavilion: hide crown facets above the stone.
+        { svg: bottomDiagram, group: "Pavilion", project: p => ({ x: p.x, y: -p.y }) }
+      ];
+
+      if (!polygons || !polygons.length) {
+        for (const view of views) {
+          view.svg.replaceChildren();
+          const message = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          message.setAttribute("x", "150");
+          message.setAttribute("y", "100");
+          message.setAttribute("fill", "#888");
+          message.setAttribute("text-anchor", "middle");
+          message.setAttribute("font-size", "12");
+          message.textContent = "No geometry available";
+          view.svg.appendChild(message);
+        }
+        diagramCaption.textContent = "No diagram geometry in this file";
+        return;
+      }
+
+      for (const view of views) {
+        const visiblePolygons = view.group
+          ? polygons.filter(polygon => (polygon.group || facetGroup(polygon.name)) === view.group)
+          : polygons;
+        const projected = visiblePolygons.map(polygon => ({
+          name: polygon.name,
+          points: polygon.vertices.map(view.project)
+        }));
+        const all = projected.flatMap(polygon => polygon.points);
+        const minX = Math.min(...all.map(p => p.x));
+        const maxX = Math.max(...all.map(p => p.x));
+        const minY = Math.min(...all.map(p => p.y));
+        const maxY = Math.max(...all.map(p => p.y));
+        const spanX = maxX - minX;
+        const spanY = maxY - minY;
+        const padding = 18;
+        const usableWidth = 300 - padding * 2;
+        const usableHeight = 200 - padding * 2;
+
+        // Guard against a flat/degenerate projection (for example, missing Z values).
+        const scaleX = spanX > 0 ? usableWidth / spanX : Infinity;
+        const scaleY = spanY > 0 ? usableHeight / spanY : Infinity;
+        const scale = Math.min(scaleX, scaleY);
+        if (!Number.isFinite(scale) || scale <= 0) {
+          view.svg.replaceChildren();
+          continue;
+        }
+
+        const offsetX = (300 - spanX * scale) / 2;
+        const offsetY = (200 - spanY * scale) / 2;
+        view.svg.replaceChildren();
+
+        for (const polygon of projected) {
+          const points = polygon.points.map(p =>
+            `${(p.x - minX) * scale + offsetX},${(maxY - p.y) * scale + offsetY}`
+          ).join(" ");
+          const shape = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+          shape.setAttribute("points", points);
+          const isSelected = selectedName !== null && polygon.name === selectedName;
+          shape.setAttribute("fill", isSelected ? "#f59e0b" : "#52677a");
+          shape.setAttribute("fill-opacity", isSelected ? "0.88" : "0.30");
+          shape.setAttribute("stroke", isSelected ? "#fff1b8" : "#91a4b5");
+          shape.setAttribute("stroke-width", isSelected ? "2.0" : "0.9");
+          shape.setAttribute("vector-effect", "non-scaling-stroke");
+          view.svg.appendChild(shape);
+        }
+      }
+
+      diagramCaption.textContent = "GCS geometry · crown from above, full side profile, pavilion from below";
+    }
+
+    function renderFacetList() {
+      facetGroupsElement.replaceChildren();
+      updateTierNavigation();
+
+      for (const groupName of ["Pavilion", "Girdle", "Crown"]) {
+        const groupFacets = designFacets.filter(f => f.group === groupName);
+        if (!groupFacets.length) continue;
+
+        const heading = document.createElement("div");
+        heading.className = "facet-group-title";
+        heading.textContent = groupName;
+        facetGroupsElement.appendChild(heading);
+
+        for (const facet of groupFacets) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "facet-row" +
+            (selectedFacetName === facet.name ? " selected" : "");
+          button.disabled = facet.name.toUpperCase() === "T";
+
+          const label = document.createElement("span");
+          label.textContent = facet.name;
+          const values = document.createElement("span");
+          values.className = "facet-values";
+          const angle = document.createElement("span");
+          angle.className = "facet-angle";
+          angle.textContent = facet.angle.toFixed(2) + "°";
+          values.appendChild(angle);
+
+          // Show index positions beneath the angle for the selected tier.
+          if (selectedFacetName === facet.name && facet.indices && facet.indices.length) {
+            const indices = document.createElement("span");
+            indices.className = "facet-indices";
+            indices.textContent = "Index: " + facet.indices.map(v => String(v).padStart(2, "0")).join(" · ");
+            values.appendChild(indices);
+          }
+
+          button.append(label, values);
+          if (facet.name.toUpperCase() !== "T") {
+            button.addEventListener("click", () => selectDesignFacet(facet));
+          } else {
+            button.title = "Table tier is shown for reference, not selectable as a cutting target.";
+          }
+          facetGroupsElement.appendChild(button);
+        }
+      }
+    }
+
+    async function selectDesignFacet(facet) {
+      try {
+        const response = await fetch(
+          "/api/target?angle=" + encodeURIComponent(facet.angle.toFixed(2)),
+          { method: "POST" }
+        );
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          throw new Error(result.message || "Unable to set target angle.");
+        }
+
+        selectedFacetName = facet.name;
+        // Redraw all three projections so only this tier is emphasized.
+        if (currentDesignGeometry) drawGcsDiagram(currentDesignGeometry, selectedFacetName);
+        targetIndicesElement.textContent = facet.indices && facet.indices.length
+          ? facet.name + ": " + facet.indices.map(v => String(v).padStart(2, "0")).join(" - ")
+          : facet.name + ": index positions unavailable";
+        renderFacetList();
+        designStatus.textContent =
+          "Target set to " + facet.name + " · " + facet.angle.toFixed(2) + "°";
+        await updateStatus();
+      } catch (error) {
+        console.error(error);
+        designStatus.textContent = error.message +
+          " Check that the matching WebServer.ino change is installed.";
+      }
+    }
+
+    designFileInput.addEventListener("change", async event => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      try {
+        const extension = file.name.split(".").pop().toLowerCase();
+        if (extension !== "asc" && extension !== "gcs") {
+          throw new Error("Please choose an .ASC or .GCS file.");
+        }
+
+        const text = await file.text();
+        const parsed = extension === "asc" ? parseAsc(text) : parseGcs(text);
+        if (!parsed.facets.length) {
+          throw new Error("No facet tiers were found in this file.");
+        }
+
+        designFacets = parsed.facets;
+        currentDesignGeometry = parsed.geometry || null;
+        selectedFacetName = null;
+        const designTitle = parsed.title || file.name;
+        designMeta.textContent =
+          designTitle + " · " + parsed.format + " · " +
+          parsed.facets.length + " tiers · " + parsed.indexGear + "-tooth index gear";
+        renderFacetList();
+
+        if (parsed.geometry) drawGcsDiagram(parsed.geometry, selectedFacetName);
+        else {
+          for (const view of [designDiagram, sideDiagram, bottomDiagram]) {
+            view.replaceChildren();
+            const line1 = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            line1.setAttribute("x", "150");
+            line1.setAttribute("y", "92");
+            line1.setAttribute("fill", "#aaa");
+            line1.setAttribute("text-anchor", "middle");
+            line1.setAttribute("font-size", "13");
+            line1.textContent = "ASC facet list";
+            const line2 = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            line2.setAttribute("x", "150");
+            line2.setAttribute("y", "110");
+            line2.setAttribute("fill", "#777");
+            line2.setAttribute("text-anchor", "middle");
+            line2.setAttribute("font-size", "10");
+            line2.textContent = "Geometry not stored in ASC";
+            view.append(line1, line2);
+          }
+          diagramCaption.textContent = "ASC contains facet instructions, not 3D geometry";
+        }
+
+        designStatus.textContent =
+          "Loaded " + parsed.facets.length + " facet tiers. Select a tier to set the target.";
+      } catch (error) {
+        console.error(error);
+        designStatus.textContent = error.message;
+      }
+    });
 
 
     updateStatus();
