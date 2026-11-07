@@ -52,22 +52,22 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       while still shrinking appropriately on narrow phone screens.
     */
     .angle {
-      margin: 24px 0 8px;
-      font-size: clamp(72px, 20vw, 96px);
+      margin: 8px 0 4px;
+      font-size: clamp(54px, 15vw, 72px);
       line-height: 1;
       font-weight: bold;
       letter-spacing: -0.04em;
     }
 
     .raw {
-      margin-bottom: 18px;
+      margin-bottom: 8px;
       color: #999999;
       font-size: 0.9rem;
     }
 
     .target-panel {
-      margin-top: 18px;
-      padding: 16px;
+      margin-top: 8px;
+      padding: 12px;
       border: 1px solid #3a3a3a;
       border-radius: 14px;
       background: #222222;
@@ -81,17 +81,17 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     }
 
     .target-angle {
-      margin-top: 3px;
-      font-size: 1.8rem;
+      margin-top: 2px;
+      font-size: 2.7rem;
       font-weight: bold;
     }
 
     .target-indices {
       min-height: 1.25em;
-      margin-top: 5px;
+      margin-top: 4px;
       color: #cbd5e1;
-      font-size: .9rem;
-      line-height: 1.35;
+      font-size: 1.35rem;
+      line-height: 1.25;
       font-variant-numeric: tabular-nums;
     }
 
@@ -99,13 +99,13 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 14px;
-      margin-top: 9px;
+      gap: 10px;
+      margin-top: 6px;
     }
 
     .tier-nav-button {
-      width: 42px;
-      height: 34px;
+      width: 38px;
+      height: 30px;
       padding: 0;
       background: #4b5563;
       color: #fff;
@@ -119,7 +119,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     }
 
     .difference-label {
-      margin-top: 15px;
+      margin-top: 7px;
       color: #bdbdbd;
       font-size: 0.9rem;
       text-transform: uppercase;
@@ -133,10 +133,10 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     .difference {
       display: block;
       width: 100%;
-      margin: 6px auto 12px;
-      padding: 12px 8px;
+      margin: 4px auto 8px;
+      padding: 8px 6px;
       border-radius: 12px;
-      font-size: clamp(52px, 16vw, 76px);
+      font-size: clamp(39px, 12vw, 57px);
       line-height: 1;
       font-weight: bold;
       font-variant-numeric: tabular-nums;
@@ -168,7 +168,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       display: flex;
       justify-content: center;
       gap: 10px;
-      margin-top: 4px;
+      margin-top: 2px;
     }
 
     button {
@@ -250,6 +250,23 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       font-size: 0.9rem;
     }
 
+
+    .viewer-section {
+      margin: 8px 0 14px;
+      padding: 8px;
+      border: 1px solid #3a3a3a;
+      border-radius: 14px;
+      background: #222222;
+    }
+
+    .viewer-section .diagram-panel {
+      padding: 0;
+      background: transparent;
+    }
+
+    .viewer-section #gem3d {
+      height: clamp(180px, 30vh, 230px);
+    }
 
     .design-section {
       margin-top: 22px;
@@ -413,7 +430,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       .design-content {
         grid-template-columns: 1fr;
       }
-      #gem3d { height: 280px; }
+      .viewer-section #gem3d { height: min(30vh, 210px); min-height: 165px; }
     }
 
     @media (max-width: 390px) {
@@ -422,7 +439,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       }
 
       .target-panel {
-        padding: 13px;
+        padding: 10px;
       }
 
       .target-buttons {
@@ -446,9 +463,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
 
 <body>
   <div class="container">
-    <h1>OpenDAD</h1>
-    <p class="subtitle">Digital Angle Display</p>
-
     <div id="angle" class="angle">--.--°</div>
 
     <div class="raw">
@@ -457,6 +471,12 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     </div>
 
     <div class="target-panel">
+      <div class="difference-label">Difference</div>
+      <strong
+        id="angleDifference"
+        class="difference unset"
+      >—</strong>
+
       <div class="target-label">Target angle</div>
       <div id="targetAngle" class="target-angle">Not set</div>
       <div id="targetIndices" class="target-indices"></div>
@@ -466,12 +486,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         <button id="nextTierButton" class="tier-nav-button"
                 type="button" title="Next tier" aria-label="Next tier" disabled>&gt;</button>
       </div>
-
-      <div class="difference-label">Difference</div>
-      <strong
-        id="angleDifference"
-        class="difference unset"
-      >—</strong>
 
       <div class="target-buttons">
         <button id="setTargetButton" class="target-button">
@@ -487,8 +501,26 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       </div>
     </div>
 
+    <section class="viewer-section" aria-label="3D gemstone visualization">
+      <div class="diagram-panel">
+        <div class="gem-view-wrap">
+          <canvas id="gem3d" aria-label="Interactive rotatable 3D gemstone model">
+            Your browser does not support canvas rendering.
+          </canvas>
+        </div>
+        <div class="gem-view-controls">
+          <span>Drag to rotate · scroll/pinch to zoom</span>
+          <button type="button" id="resetGemView">Reset view</button>
+        </div>
+        <div id="diagramCaption" class="diagram-caption">
+          Interactive 3D GCS facet model
+        </div>
+      </div>
+    </section>
 
     <section class="design-section">
+      <h1>OpenDAD</h1>
+      <p class="subtitle">Digital Angle Display</p>
       <div class="section-label">Faceting design</div>
       <div class="design-upload">
         <input
@@ -502,20 +534,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         Load a GemCad ASC or Gem Cut Studio GCS design.
       </div>
       <div class="design-content">
-        <div class="diagram-panel">
-          <div class="gem-view-wrap">
-            <canvas id="gem3d" aria-label="Interactive rotatable 3D gemstone model">
-              Your browser does not support canvas rendering.
-            </canvas>
-          </div>
-          <div class="gem-view-controls">
-            <span>Drag to rotate · scroll/pinch to zoom</span>
-            <button type="button" id="resetGemView">Reset view</button>
-          </div>
-          <div id="diagramCaption" class="diagram-caption">
-            Interactive 3D GCS facet model
-          </div>
-        </div>
         <div id="facetGroups" class="facet-groups">
           <div class="diagram-caption">Facet tiers will appear here.</div>
         </div>
