@@ -1,11 +1,11 @@
 /******************************************************************************
-  OpenDAD calibration, smoothing, storage, and serial commands
+  OpenDAD 10-point calibration, smoothing, storage, and serial commands
 ******************************************************************************/
+
+#include <math.h>
 
 /******************************************************************************
   Global calibration and Preferences objects
-
-  These are declared with extern in OpenDAD.ino and defined here exactly once.
 ******************************************************************************/
 
 Preferences prefs;
@@ -14,7 +14,12 @@ CalibrationData cal;
 float smoothedAngle = 0.0;
 bool filterInitialized = false;
 
-const float SMOOTHING_ALPHA = 0.3;
+const float SMOOTHING_ALPHA = 0.3f;
+const int CAL_POINT_COUNT = 10;
+const float CAL_TARGET_ANGLES[CAL_POINT_COUNT] = {
+  0.0f, 10.0f, 20.0f, 30.0f, 40.0f,
+  50.0f, 60.0f, 70.0f, 80.0f, 90.0f
+};
 
 /******************************************************************************
   Angle utility functions
@@ -22,16 +27,8 @@ const float SMOOTHING_ALPHA = 0.3;
 
 float normalizeSigned(float angle)
 {
-  while (angle > 180.0)
-  {
-    angle -= 360.0;
-  }
-
-  while (angle <= -180.0)
-  {
-    angle += 360.0;
-  }
-
+  while (angle > 180.0f) angle -= 360.0f;
+  while (angle <= -180.0f) angle += 360.0f;
   return angle;
 }
 
@@ -41,48 +38,71 @@ float signedDelta(float fromAngle, float toAngle)
 }
 
 /******************************************************************************
-  Calibration storage
+  Calibration point lookup and storage
 ******************************************************************************/
+
+int calibrationIndex(float targetAngle)
+{
+  int index = (int)lroundf(targetAngle / 10.0f);
+
+  if (index < 0 || index >= CAL_POINT_COUNT) return -1;
+  if (fabsf(targetAngle - CAL_TARGET_ANGLES[index]) > 0.01f) return -1;
+
+  return index;
+}
+
+bool calibrationPointSet(float targetAngle)
+{
+  int index = calibrationIndex(targetAngle);
+  return index >= 0 && cal.has[index];
+}
 
 void saveCalibration()
 {
-  prefs.putFloat("cal0", cal.raw0);
-  prefs.putFloat("cal45", cal.raw45);
-  prefs.putFloat("cal90", cal.raw90);
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    char rawKey[12];
+    char setKey[12];
 
-  prefs.putBool("has0", cal.has0);
-  prefs.putBool("has45", cal.has45);
-  prefs.putBool("has90", cal.has90);
+    // Use new key names so legacy cal0/cal45/cal90 values cannot be
+    // mistaken for a completed ten-point calibration.
+    snprintf(rawKey, sizeof(rawKey), "praw%d", i * 10);
+    snprintf(setKey, sizeof(setKey), "pset%d", i * 10);
+
+    prefs.putFloat(rawKey, cal.raw[i]);
+    prefs.putBool(setKey, cal.has[i]);
+  }
 }
 
 void loadCalibration()
 {
-  cal.raw0 = prefs.getFloat("cal0", 0.0);
-  cal.raw45 = prefs.getFloat("cal45", 45.0);
-  cal.raw90 = prefs.getFloat("cal90", 90.0);
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    char rawKey[12];
+    char setKey[12];
 
-  cal.has0 = prefs.getBool("has0", false);
-  cal.has45 = prefs.getBool("has45", false);
-  cal.has90 = prefs.getBool("has90", false);
+    snprintf(rawKey, sizeof(rawKey), "praw%d", i * 10);
+    snprintf(setKey, sizeof(setKey), "pset%d", i * 10);
 
-  Serial.println("Calibration loaded");
+    cal.raw[i] = prefs.getFloat(rawKey, CAL_TARGET_ANGLES[i]);
+    cal.has[i] = prefs.getBool(setKey, false);
+  }
+
+  Serial.println("10-point calibration loaded:");
+
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    Serial.printf(
+      "  %2d degrees: %-7s raw %.3f\n",
+      i * 10,
+      cal.has[i] ? "set" : "not set",
+      cal.raw[i]
+    );
+  }
 
   Serial.printf(
-    "  0:  %s  raw %.2f\n",
-    cal.has0 ? "set" : "not set",
-    cal.raw0
-  );
-
-  Serial.printf(
-    "  45: %s  raw %.2f\n",
-    cal.has45 ? "set" : "not set",
-    cal.raw45
-  );
-
-  Serial.printf(
-    "  90: %s  raw %.2f\n",
-    cal.has90 ? "set" : "not set",
-    cal.raw90
+    "Calibration complete: %s\n",
+    calibrationComplete() ? "YES" : "NO"
   );
 }
 
@@ -92,7 +112,12 @@ void loadCalibration()
 
 bool calibrationComplete()
 {
-  return cal.has0 && cal.has45 && cal.has90;
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    if (!cal.has[i]) return false;
+  }
+
+  return true;
 }
 
 void clearSmoothing()
@@ -102,34 +127,37 @@ void clearSmoothing()
 
 void setCalibrationPoint(float rawAngle, float targetAngle)
 {
-  if (targetAngle == 0.0)
+  int index = calibrationIndex(targetAngle);
+
+  if (index < 0)
   {
-    cal.raw0 = rawAngle;
-    cal.has0 = true;
-  }
-  else if (targetAngle == 45.0)
-  {
-    cal.raw45 = rawAngle;
-    cal.has45 = true;
-  }
-  else if (targetAngle == 90.0)
-  {
-    cal.raw90 = rawAngle;
-    cal.has90 = true;
-  }
-  else
-  {
-    Serial.println("Unsupported calibration point");
+    Serial.println("Unsupported calibration point. Use 0, 10, 20 ... 90.");
     return;
   }
+
+  // Capture the raw sensor reading, never the calibrated or smoothed angle.
+  cal.raw[index] = rawAngle;
+  cal.has[index] = true;
 
   saveCalibration();
   clearSmoothing();
 
   Serial.printf(
-    "Saved %.0f degree calibration at raw %.2f\n",
-    targetAngle,
+    "Saved %d degree calibration at raw %.3f\n",
+    index * 10,
     rawAngle
+  );
+
+  int savedCount = 0;
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    if (cal.has[i]) savedCount++;
+  }
+
+  Serial.printf(
+    "Calibration points saved: %d/%d\n",
+    savedCount,
+    CAL_POINT_COUNT
   );
 }
 
@@ -140,102 +168,105 @@ void resetCalibration()
   saveCalibration();
   clearSmoothing();
 
-  Serial.println("Calibration reset");
+  Serial.println("10-point calibration reset");
 }
 
 /******************************************************************************
-  Calibration calculations
+  Calibration calculation
+
+  Uses all saved points in target-angle order. Raw readings are unwrapped
+  relative to the first saved point, allowing the sensor's 0/360 transition.
+  Missing calibration points are bridged by the neighboring saved points.
+  Values outside the saved range use the nearest end segment for extrapolation.
 ******************************************************************************/
-
-float mapCalibratedSegment(
-  float rawAngle,
-  float rawA,
-  float rawB,
-  float angleA,
-  float angleB)
-{
-  float span = signedDelta(rawA, rawB);
-
-  if (fabs(span) < 1.0)
-  {
-    return normalizeSigned(rawAngle);
-  }
-
-  float position = signedDelta(rawA, rawAngle);
-
-  return angleA +
-         position * (angleB - angleA) / span;
-}
 
 float applyCalibration(float rawAngle)
 {
-  /*
-    With fewer than two useful points, display the signed raw angle.
-  */
-  if (!(cal.has0 && cal.has90))
+  int validIndices[CAL_POINT_COUNT];
+  int validCount = 0;
+
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    if (cal.has[i]) validIndices[validCount++] = i;
+  }
+
+  // At least two independent reference points are required.
+  if (validCount < 2)
   {
     return normalizeSigned(rawAngle);
   }
 
-  /*
-    Two-point calibration using 0 and 90 degrees.
-  */
-  if (!cal.has45)
-  {
-    return mapCalibratedSegment(
-      rawAngle,
-      cal.raw0,
-      cal.raw90,
-      0.0,
-      90.0
-    );
-  }
+  float rawOffsets[CAL_POINT_COUNT];
+  rawOffsets[0] = 0.0f;
 
-  /*
-    Three-point calibration.
-
-    The 0-to-45 segment handles values at and below 45 degrees,
-    including small negative values below zero.
-  */
-  float span0to45 = signedDelta(
-    cal.raw0,
-    cal.raw45
+  float firstSpan = signedDelta(
+    cal.raw[validIndices[0]],
+    cal.raw[validIndices[1]]
   );
 
-  if (fabs(span0to45) < 1.0)
+  if (fabsf(firstSpan) < 0.01f)
   {
     return normalizeSigned(rawAngle);
   }
 
-  float positionFromZero = signedDelta(
-    cal.raw0,
+  // Determine whether raw sensor angle increases or decreases with mast angle.
+  const float direction = (firstSpan >= 0.0f) ? 1.0f : -1.0f;
+
+  for (int i = 1; i < validCount; i++)
+  {
+    float span = signedDelta(
+      cal.raw[validIndices[i - 1]],
+      cal.raw[validIndices[i]]
+    ) * direction;
+
+    // A non-monotonic or duplicated calibration reading is not safe to map.
+    if (span <= 0.01f)
+    {
+      return normalizeSigned(rawAngle);
+    }
+
+    rawOffsets[i] = rawOffsets[i - 1] + span;
+  }
+
+  float rawPosition = signedDelta(
+    cal.raw[validIndices[0]],
     rawAngle
-  );
+  ) * direction;
 
-  float fraction0to45 =
-    positionFromZero / span0to45;
+  // Find the segment containing this raw position. Extrapolate with the
+  // first or last segment when the angle is outside the calibrated range.
+  int segment = 0;
 
-  if (fraction0to45 <= 1.0)
+  if (rawPosition >= rawOffsets[validCount - 1])
   {
-    return mapCalibratedSegment(
-      rawAngle,
-      cal.raw0,
-      cal.raw45,
-      0.0,
-      45.0
-    );
+    segment = validCount - 2;
+  }
+  else if (rawPosition > rawOffsets[0])
+  {
+    for (int i = 0; i < validCount - 1; i++)
+    {
+      if (rawPosition <= rawOffsets[i + 1])
+      {
+        segment = i;
+        break;
+      }
+    }
   }
 
-  /*
-    Values above 45 degrees use the 45-to-90 segment.
-  */
-  return mapCalibratedSegment(
-    rawAngle,
-    cal.raw45,
-    cal.raw90,
-    45.0,
-    90.0
-  );
+  int indexA = validIndices[segment];
+  int indexB = validIndices[segment + 1];
+
+  float rawSpan = rawOffsets[segment + 1] - rawOffsets[segment];
+  if (rawSpan <= 0.01f)
+  {
+    return normalizeSigned(rawAngle);
+  }
+
+  float fraction =
+    (rawPosition - rawOffsets[segment]) / rawSpan;
+
+  return CAL_TARGET_ANGLES[indexA] +
+         fraction * (CAL_TARGET_ANGLES[indexB] - CAL_TARGET_ANGLES[indexA]);
 }
 
 /******************************************************************************
@@ -248,26 +279,15 @@ float smoothAngle(float newAngle)
   {
     smoothedAngle = newAngle;
     filterInitialized = true;
-
     return smoothedAngle;
   }
 
-  float difference =
-    newAngle - smoothedAngle;
+  float difference = newAngle - smoothedAngle;
 
-  if (difference > 180.0)
-  {
-    difference -= 360.0;
-  }
+  if (difference > 180.0f) difference -= 360.0f;
+  if (difference < -180.0f) difference += 360.0f;
 
-  if (difference < -180.0)
-  {
-    difference += 360.0;
-  }
-
-  smoothedAngle +=
-    SMOOTHING_ALPHA * difference;
-
+  smoothedAngle += SMOOTHING_ALPHA * difference;
   return smoothedAngle;
 }
 
@@ -277,35 +297,28 @@ float smoothAngle(float newAngle)
 
 void handleSerialCommands(float rawAngle)
 {
-  if (!Serial.available())
+  if (!Serial.available()) return;
+
+  String command = Serial.readStringUntil('\n');
+  command.trim();
+
+  if (command == "r" || command == "R")
   {
+    resetCalibration();
     return;
   }
 
-  String command =
-    Serial.readStringUntil('\n');
+  for (int i = 0; i < CAL_POINT_COUNT; i++)
+  {
+    String expected = String(i * 10);
 
-  command.trim();
+    if (command == expected)
+    {
+      setCalibrationPoint(rawAngle, CAL_TARGET_ANGLES[i]);
+      return;
+    }
+  }
 
-  if (command == "0")
-  {
-    setCalibrationPoint(rawAngle, 0.0);
-  }
-  else if (command == "45")
-  {
-    setCalibrationPoint(rawAngle, 45.0);
-  }
-  else if (command == "90")
-  {
-    setCalibrationPoint(rawAngle, 90.0);
-  }
-  else if (command == "r" || command == "R")
-  {
-    resetCalibration();
-  }
-  else
-  {
-    Serial.print("Unknown command: ");
-    Serial.println(command);
-  }
+  Serial.print("Unknown command: ");
+  Serial.println(command);
 }

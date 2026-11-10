@@ -2,11 +2,9 @@
   OpenDAD web server
 
   Provides:
-    GET  /                  Basic OpenDAD test webpage
-    GET  /api/status        Current angle and calibration status
-    POST /api/calibrate/0   Save current position as 0 degrees
-    POST /api/calibrate/45  Save current position as 45 degrees
-    POST /api/calibrate/90  Save current position as 90 degrees
+    GET  /                  OpenDAD webpage
+    GET  /api/status        Current angle and ten-point calibration status
+    POST /api/calibrate/0..90  Save a calibration point in 10-degree steps
     POST /api/reset         Clear calibration
 
   The ESP32 built-in WebServer library handles one HTTP request at a time,
@@ -124,96 +122,103 @@ void handleRoot()
 
 void handleApiStatus()
 {
-  char json[420];
+  String json;
+  json.reserve(520);
 
-  const float targetDifference = getTargetDifference();
+  json += "{";
+  json += "\"angle\":" + String(webState.displayAngle, 2) + ",";
+  json += "\"rawAngle\":" + String(webState.rawAngle, 2) + ",";
+  json += "\"rawWord\":" + String(webState.rawWord) + ",";
+  json += "\"rawHex\":\"";
+  char rawHex[5];
+  snprintf(rawHex, sizeof(rawHex), "%04X", webState.rawWord);
+  json += rawHex;
+  json += "\",";
+  json += "\"calibrationPoints\":[";
 
-  snprintf(
-    json,
-    sizeof(json),
-    "{"
-      "\"angle\":%.2f,"
-      "\"rawAngle\":%.2f,"
-      "\"rawWord\":%u,"
-      "\"rawHex\":\"%04X\","
-      "\"cal0\":%s,"
-      "\"cal45\":%s,"
-      "\"cal90\":%s,"
-      "\"calibrationComplete\":%s,"
-      "\"sensorReady\":%s,"
-      "\"connectedDevices\":%d,"
-      "\"targetSet\":%s,"
-      "\"target\":%.2f,"
-      "\"difference\":%.2f"
-    "}",
-    webState.displayAngle,
-    webState.rawAngle,
-    webState.rawWord,
-    webState.rawWord,
-    cal.has0 ? "true" : "false",
-    cal.has45 ? "true" : "false",
-    cal.has90 ? "true" : "false",
-    calibrationComplete() ? "true" : "false",
-    webState.sensorReady ? "true" : "false",
-    getConnectedDeviceCount(),
-    targetAngleSet ? "true" : "false",
-    targetAngle,
-    targetDifference
-  );
+  for (int i = 0; i <= 90; i += 10)
+  {
+    if (i > 0) json += ",";
+    json += calibrationPointSet((float)i) ? "true" : "false";
+  }
 
-  sendJsonResponse(String(json));
+  json += "],";
+  json += "\"calibrationComplete\":";
+  json += calibrationComplete() ? "true" : "false";
+  json += ",";
+  json += "\"sensorReady\":";
+  json += webState.sensorReady ? "true" : "false";
+  json += ",";
+  json += "\"connectedDevices\":" + String(getConnectedDeviceCount()) + ",";
+  json += "\"targetSet\":";
+  json += targetAngleSet ? "true" : "false";
+  json += ",";
+  json += "\"target\":" + String(targetAngle, 2) + ",";
+  json += "\"difference\":" + String(getTargetDifference(), 2);
+  json += "}";
+
+  sendJsonResponse(json);
 }
 
 /******************************************************************************
-  Calibration API handlers
+  Calibration API handler
+
+  Route suffix must be one of 0, 10, 20 ... 90.
 ******************************************************************************/
 
-void handleCalibrateZero()
+void handleCalibratePoint()
 {
   if (!webState.sensorReady)
   {
+    sendCommandResult(false, "Sensor data is not available", 503);
+    return;
+  }
+
+  const String prefix = "/api/calibrate/";
+  String uri = server.uri();
+
+  if (!uri.startsWith(prefix))
+  {
+    sendCommandResult(false, "Invalid calibration route", 400);
+    return;
+  }
+
+  String angleText = uri.substring(prefix.length());
+  angleText.trim();
+
+  if (angleText.length() == 0)
+  {
+    sendCommandResult(false, "Missing calibration angle", 400);
+    return;
+  }
+
+  for (unsigned int i = 0; i < angleText.length(); i++)
+  {
+    if (!isDigit(angleText[i]))
+    {
+      sendCommandResult(false, "Invalid calibration angle", 400);
+      return;
+    }
+  }
+
+  int target = angleText.toInt();
+
+  if (target < 0 || target > 90 || (target % 10) != 0)
+  {
     sendCommandResult(
       false,
-      "Sensor data is not available",
-      503
+      "Calibration angle must be 0 through 90 in 10-degree steps",
+      400
     );
     return;
   }
 
-  setCalibrationPoint(webState.rawAngle, 0.0);
-  sendCommandResult(true, "Zero-degree calibration saved");
-}
+  setCalibrationPoint(webState.rawAngle, (float)target);
 
-void handleCalibrateFortyFive()
-{
-  if (!webState.sensorReady)
-  {
-    sendCommandResult(
-      false,
-      "Sensor data is not available",
-      503
-    );
-    return;
-  }
-
-  setCalibrationPoint(webState.rawAngle, 45.0);
-  sendCommandResult(true, "Forty-five-degree calibration saved");
-}
-
-void handleCalibrateNinety()
-{
-  if (!webState.sensorReady)
-  {
-    sendCommandResult(
-      false,
-      "Sensor data is not available",
-      503
-    );
-    return;
-  }
-
-  setCalibrationPoint(webState.rawAngle, 90.0);
-  sendCommandResult(true, "Ninety-degree calibration saved");
+  String message = "Calibration saved at ";
+  message += String(target);
+  message += " degrees";
+  sendCommandResult(true, message.c_str());
 }
 
 void handleResetCalibration()
@@ -329,23 +334,11 @@ void setupWebServer()
   /*
     POST routes
   */
-  server.on(
-    "/api/calibrate/0",
-    HTTP_POST,
-    handleCalibrateZero
-  );
-
-  server.on(
-    "/api/calibrate/45",
-    HTTP_POST,
-    handleCalibrateFortyFive
-  );
-
-  server.on(
-    "/api/calibrate/90",
-    HTTP_POST,
-    handleCalibrateNinety
-  );
+  for (int angle = 0; angle <= 90; angle += 10)
+  {
+    String route = "/api/calibrate/" + String(angle);
+    server.on(route, HTTP_POST, handleCalibratePoint);
+  }
 
   server.on(
     "/api/reset",

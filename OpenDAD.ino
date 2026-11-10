@@ -16,13 +16,17 @@
 
 struct CalibrationData
 {
-  float raw0 = 0.0;
-  float raw45 = 45.0;
-  float raw90 = 90.0;
+  // Ten raw sensor readings, corresponding to physical angles 0..90
+  // in 10-degree increments.
+  float raw[10] = {
+    0.0, 10.0, 20.0, 30.0, 40.0,
+    50.0, 60.0, 70.0, 80.0, 90.0
+  };
 
-  bool has0 = false;
-  bool has45 = false;
-  bool has90 = false;
+  bool has[10] = {
+    false, false, false, false, false,
+    false, false, false, false, false
+  };
 };
 
 /******************************************************************************
@@ -55,6 +59,7 @@ float rawWordToDegrees(uint16_t raw);
 ******************************************************************************/
 
 bool calibrationComplete();
+bool calibrationPointSet(float targetAngle);
 
 void loadCalibration();
 void saveCalibration();
@@ -103,11 +108,9 @@ void printStartupInfo()
   Serial.println("TLE5012 + ESP32 web interface");
   Serial.println();
 
-  Serial.println("Calibration commands:");
-  Serial.println("  0  = save current position as 0 degrees");
-  Serial.println("  45 = save current position as 45 degrees");
-  Serial.println("  90 = save current position as 90 degrees");
-  Serial.println("  r  = reset calibration");
+  Serial.println("Calibration commands (set mast to reference angle first):");
+  Serial.println("  0, 10, 20, 30, 40, 50, 60, 70, 80, 90");
+  Serial.println("  r = reset calibration");
   Serial.println();
 }
 

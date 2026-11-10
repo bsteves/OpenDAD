@@ -527,7 +527,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
           id="designFile"
           class="file-input"
           type="file"
-          accept=".asc,.gcs"
         >
       </div>
       <div id="designMeta" class="design-meta">
@@ -542,15 +541,43 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     </section>
 
     <div class="calibration-section">
-      <div class="section-label">Calibration</div>
+      <div class="section-label">Calibration · Set mast to each reference angle</div>
 
       <div class="calibration-buttons">
         <button class="cal-button" data-command="/api/calibrate/0">
           Set 0°
         </button>
 
-        <button class="cal-button" data-command="/api/calibrate/45">
-          Set 45°
+        <button class="cal-button" data-command="/api/calibrate/10">
+          Set 10°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/20">
+          Set 20°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/30">
+          Set 30°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/40">
+          Set 40°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/50">
+          Set 50°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/60">
+          Set 60°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/70">
+          Set 70°
+        </button>
+
+        <button class="cal-button" data-command="/api/calibrate/80">
+          Set 80°
         </button>
 
         <button class="cal-button" data-command="/api/calibrate/90">
@@ -1164,13 +1191,17 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       if (!file) return;
 
       try {
-        const extension = file.name.split(".").pop().toLowerCase();
-        if (extension !== "asc" && extension !== "gcs") {
-          throw new Error("Please choose an .ASC or .GCS file.");
+        const lowerName = file.name.toLowerCase();
+        const isAsc = lowerName.endsWith(".asc");
+        // iOS Safari may append .xml to downloaded Gem Cut Studio files.
+        const isGcs = lowerName.endsWith(".gcs") || lowerName.endsWith(".gcs.xml");
+
+        if (!isAsc && !isGcs) {
+          throw new Error("Please choose an .ASC, .GCS, or .GCS.XML file.");
         }
 
         const text = await file.text();
-        const parsed = extension === "asc" ? parseAsc(text) : parseGcs(text);
+        const parsed = isAsc ? parseAsc(text) : parseGcs(text);
         if (!parsed.facets.length) {
           throw new Error("No facet tiers were found in this file.");
         }
