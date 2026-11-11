@@ -95,6 +95,15 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       font-variant-numeric: tabular-nums;
     }
 
+    .instructions {
+      min-height: 1.25em;
+      margin-top: 4px;
+      color: #cbd5e1;
+      font-size: 1.35rem;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+    }
+
     .tier-navigation {
       display: flex;
       justify-content: center;
@@ -480,6 +489,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       <div class="target-label">Target angle</div>
       <div id="targetAngle" class="target-angle">Not set</div>
       <div id="targetIndices" class="target-indices"></div>
+      <div id="instructions" class="instructions"></div>
       <div class="tier-navigation" aria-label="Select adjacent facet tier">
         <button id="previousTierButton" class="tier-nav-button"
                 type="button" title="Previous tier" aria-label="Previous tier" disabled>&lt;</button>
@@ -608,6 +618,9 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
 
     const targetIndicesElement =
       document.getElementById("targetIndices");
+    
+    const instructionsElement =
+      document.getElementById("instructions");
 
     const connectionElement =
       document.getElementById("connection");
@@ -641,6 +654,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         {
           targetElement.textContent = "Not set";
           targetIndicesElement.textContent = "";
+          instructionsElement.textContent = "";
           differenceElement.textContent = "—";
           differenceElement.className = "difference unset";
         }
@@ -701,6 +715,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         }
 
         targetIndicesElement.textContent = "";
+        instructionsElement.textContent = "";
         selectedFacetName = null;
         renderFacetList();
         await updateStatus();
@@ -726,6 +741,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         }
 
         targetIndicesElement.textContent = "";
+        instructionsElement.textContent = "";
         selectedFacetName = null;
         renderFacetList();
         await updateStatus();
@@ -1172,6 +1188,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         selectedFacetName = facet.name;
         // Redraw all three projections so only this tier is emphasized.
         if (currentDesignGeometry) drawGcsDiagram(currentDesignGeometry, selectedFacetName);
+        instructionsElement.textContent = facet.instructions
         targetIndicesElement.textContent = facet.indices && facet.indices.length
           ? facet.name + ": " + facet.indices.map(v => String(v).padStart(2, "0")).join(" - ")
           : facet.name + ": index positions unavailable";
