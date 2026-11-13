@@ -14,9 +14,8 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     name="viewport"
     content="width=device-width, initial-scale=1.0"
   >
-
   <title>OpenDAD</title>
-
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <style>
     * {
       box-sizing: border-box;
@@ -209,12 +208,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       background: #5f6368;
     }
 
-    .calibration-section {
-      margin-top: 22px;
-      padding-top: 16px;
-      border-top: 1px solid #333333;
-    }
-
     .section-label {
       margin-bottom: 9px;
       color: #aaaaaa;
@@ -223,34 +216,10 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       letter-spacing: 0.08em;
     }
 
-    /*
-      These are the actual calibration controls. The former maroon 0°, 45°,
-      and 90° status boxes have been removed.
-    */
-    .calibration-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .cal-button,
-    .reset-button {
-      width: auto;
-      min-width: 82px;
-      margin: 0;
-      padding: 9px 11px;
-      font-size: 0.9rem;
-    }
-
-    .cal-button {
-      background: #e5e7eb;
-      color: #111111;
-    }
-
-    .reset-button {
-      background: #8f2929;
-      color: #ffffff;
+    .calibration-link {
+      display: inline-block;
+      margin-top: 22px;
+      color: #a9c7ff;
     }
 
     #connection {
@@ -460,12 +429,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         padding: 8px 10px;
       }
 
-      .cal-button,
-      .reset-button {
-        min-width: 72px;
-        padding: 8px;
-        font-size: 0.82rem;
-      }
     }
   </style>
 </head>
@@ -550,55 +513,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
       <div id="designStatus" aria-live="polite"></div>
     </section>
 
-    <div class="calibration-section">
-      <div class="section-label">Calibration · Set mast to each reference angle</div>
-
-      <div class="calibration-buttons">
-        <button class="cal-button" data-command="/api/calibrate/0">
-          Set 0°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/10">
-          Set 10°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/20">
-          Set 20°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/30">
-          Set 30°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/40">
-          Set 40°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/50">
-          Set 50°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/60">
-          Set 60°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/70">
-          Set 70°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/80">
-          Set 80°
-        </button>
-
-        <button class="cal-button" data-command="/api/calibrate/90">
-          Set 90°
-        </button>
-
-        <button class="reset-button" data-command="/api/reset">
-          Reset
-        </button>
-      </div>
-    </div>
+    <a class="calibration-link" href="/calibration">Calibration</a>
 
     <div id="connection">Connecting...</div>
   </div>
@@ -753,40 +668,6 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
     }
 
 
-    async function sendCommand(path)
-    {
-      try
-      {
-        const response = await fetch(path, {
-          method: "POST"
-        });
-
-        if (!response.ok)
-        {
-          throw new Error("Command failed");
-        }
-
-        await updateStatus();
-      }
-      catch (error)
-      {
-        console.error("Command failed:", error);
-        connectionElement.textContent = "Command failed";
-      }
-    }
-
-
-    document
-      .querySelectorAll("[data-command]")
-      .forEach(button =>
-      {
-        button.addEventListener("click", () =>
-        {
-          sendCommand(button.dataset.command);
-        });
-      });
-
-
     document
       .getElementById("setTargetButton")
       .addEventListener("click", setTarget);
@@ -919,7 +800,7 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
           angle: Math.abs(storedAngle),
           indices: normalizeIndices(indexValues, indexGear),
           group: facetGroup(name),
-          instructions: ""
+          instructions: gIndex < 0 ? "" : tokens.slice(gIndex + 1).join(" ")
         });
       }
 
@@ -1226,6 +1107,8 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
         designFacets = parsed.facets;
         currentDesignGeometry = parsed.geometry || null;
         selectedFacetName = null;
+        targetIndicesElement.textContent = "";
+        instructionsElement.textContent = "";
         const designTitle = parsed.title || file.name;
         designMeta.textContent =
           designTitle + " · " + parsed.format + " · " +
@@ -1238,8 +1121,13 @@ const char WEB_PAGE[] PROGMEM = R"HTML(
           diagramCaption.textContent = "ASC contains facet instructions, not 3D geometry";
         }
 
-        designStatus.textContent =
-          "Loaded " + parsed.facets.length + " facet tiers. Select a tier to set the target.";
+        const firstFacet = selectableFacets()[0];
+        if (firstFacet) {
+          await selectDesignFacet(firstFacet);
+        } else {
+          designStatus.textContent =
+            "Loaded " + parsed.facets.length + " facet tiers, but none can be selected as a target.";
+        }
       } catch (error) {
         console.error(error);
         designStatus.textContent = error.message;

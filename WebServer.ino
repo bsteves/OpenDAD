@@ -3,6 +3,7 @@
 
   Provides:
     GET  /                  OpenDAD webpage
+    GET  /calibration       Calibration controls and saved readings
     GET  /api/status        Current angle and ten-point calibration status
     POST /api/calibrate/0..90  Save a calibration point in 10-degree steps
     POST /api/reset         Clear calibration
@@ -45,6 +46,7 @@ WebInstrumentState webState;
 ******************************************************************************/
 
 extern const char WEB_PAGE[] PROGMEM;
+extern const char CALIBRATION_PAGE[] PROGMEM;
 
 
 /******************************************************************************
@@ -102,6 +104,12 @@ void handleRoot()
   server.send_P(200, "text/html", WEB_PAGE);
 }
 
+void handleCalibrationPage()
+{
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html", CALIBRATION_PAGE);
+}
+
 /******************************************************************************
   Status API
 
@@ -112,9 +120,8 @@ void handleRoot()
     "rawAngle": 218.34,
     "rawWord": 42763,
     "rawHex": "A70B",
-    " cal0": true,
-    "cal45": true,
-    "cal90": false,
+    "calibrationPoints": [true, true, false, false, false, false, false, false, false, false],
+    "calibrationRawAngles": [218.340, 228.340, null, null, null, null, null, null, null, null],
     "calibrationComplete": false,
     "sensorReady": true
   }
@@ -123,7 +130,7 @@ void handleRoot()
 void handleApiStatus()
 {
   String json;
-  json.reserve(520);
+  json.reserve(700);
 
   json += "{";
   json += "\"angle\":" + String(webState.displayAngle, 2) + ",";
@@ -140,6 +147,15 @@ void handleApiStatus()
   {
     if (i > 0) json += ",";
     json += calibrationPointSet((float)i) ? "true" : "false";
+  }
+
+  json += "],";
+  json += "\"calibrationRawAngles\":[";
+
+  for (int i = 0; i < 10; i++)
+  {
+    if (i > 0) json += ",";
+    json += cal.has[i] ? String(cal.raw[i], 3) : "null";
   }
 
   json += "],";
@@ -329,6 +345,7 @@ void setupWebServer()
     GET routes
   */
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/calibration", HTTP_GET, handleCalibrationPage);
   server.on("/api/status", HTTP_GET, handleApiStatus);
 
   /*

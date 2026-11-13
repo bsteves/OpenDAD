@@ -15,7 +15,7 @@ Unlike commercial DADs costing several hundred dollars, OpenDAD is inexpensive, 
 - Seeed Studio XIAO ESP32-S3 controller
 - Built-in Wi-Fi access point and browser-based interface
 - Responsive interface for phones, tablets, and computers; no app installation required
-- Three-point calibration (0°, 45°, 90°), stored in flash memory
+- Ten-point calibration (0° through 90° in 10° steps), stored in flash memory
 - Target angle mode with a prominent signed difference display
 - Set a target directly from a selected facet tier in an imported design
 - Previous/next facet-tier navigation
@@ -82,7 +82,7 @@ The main display includes:
 - Target angle and signed difference from target
 - Difference color feedback
 - Manual **Set Target** and **Clear** controls
-- Calibration controls
+- A link to the calibration page
 - Sensor/connection status
 
 The page requests the browser Screen Wake Lock where supported. Browser and device power-management settings may still turn off the screen.
@@ -93,14 +93,14 @@ Use the **Faceting design** file chooser to load a local `.asc` or `.gcs` design
 
 Supported formats:
 
-- **GemCad ASC (`.asc`)** — tier names, angles, and index positions are parsed from the design instructions. ASC files do not provide the 3D vertex geometry used by the viewer, so ASC designs load their tier list without a 3D model.
+- **GemCad ASC (`.asc`)** — tier names, angles, index positions, and any instructions following the `G` marker are parsed from the design. ASC files do not provide the 3D vertex geometry used by the viewer, so ASC designs load their tier list without a 3D model.
 - **Gem Cut Studio GCS (`.gcs`)** — tier names, angles, index positions, instructions, and facet vertex coordinates are read from the XML design. The index gear is read from the file; a default of 96 is used if it is not specified.
 
 The tier list groups entries as Crown, Girdle, or Pavilion based on their tier names. The Table tier (`T`) is not selectable for target setting or adjacent-tier navigation.
 
 ### Selecting a facet tier
 
-Select a tier in the list, or use the left/right arrow controls to move to the previous or next selectable tier. Selecting a tier:
+After loading a design, the first selectable tier in file order is selected automatically and its target is set. Select another tier in the list, or use the left/right arrow controls to move to the previous or next selectable tier. Selecting a tier:
 
 1. Highlights that tier in the 3D GCS model, when geometry is available.
 2. Displays its angle as the target angle.
@@ -124,15 +124,19 @@ The viewer is self-contained and does not require an internet connection, a thir
 
 # Calibration
 
-OpenDAD uses a three-point calibration:
+Open the **Calibration** link and position the machine at each reference angle
+from 0° through 90° in 10° steps. Press the corresponding button to save the
+raw sensor reading shown beside it. Each point is stored independently in
+flash memory and can be captured again; **Reset calibration** clears all points.
 
-- Vertical quill → 0°
-- Precision angle block → 45°
-- Horizontal quill → 90°
-
-This compensates for sensor alignment, magnet placement, mechanical offsets, and small nonlinearities. Calibration is stored in flash memory.
-
-Use the **Set 0°**, **Set 45°**, and **Set 90°** controls when the machine is positioned at the corresponding reference angles. **Reset** clears the calibration points.
+The calibration interpolates between saved points to compensate for sensor
+alignment, mechanical offsets, and nonlinearities. Once all points are saved,
+the page displays and plots each raw reading's signed deviation from an estimate
+based on its neighboring points. The end points use extrapolation from the next two
+points and are less reliable. These are consistency checks in raw sensor
+degrees, not measurements of actual accuracy: real nonlinearities can also
+produce deviations. The page warns when readings do not progress consistently,
+which prevents the calibration from being applied.
 
 ---
 
@@ -174,9 +178,8 @@ The response includes the calibrated angle, raw sensor reading, calibration stat
   "rawAngle": 218.34,
   "rawWord": 42763,
   "rawHex": "A70B",
-  "cal0": true,
-  "cal45": true,
-  "cal90": true,
+  "calibrationPoints": [true, true, true, true, true, true, true, true, true, true],
+  "calibrationRawAngles": [218.340, 228.340, 238.340, 248.340, 258.340, 268.340, 278.340, 288.340, 298.340, 308.340],
   "calibrationComplete": true,
   "sensorReady": true,
   "connectedDevices": 1,
@@ -186,13 +189,15 @@ The response includes the calibrated angle, raw sensor reading, calibration stat
 }
 ```
 
-Values above are illustrative.
+Values above are illustrative. `calibrationRawAngles` contains saved raw readings
+in target order (0°, 10°, ... 90°), or `null` for an unset point.
 
 ## Calibration
 
 ```http
 POST /api/calibrate/0
-POST /api/calibrate/45
+POST /api/calibrate/10
+...
 POST /api/calibrate/90
 POST /api/reset
 ```
@@ -240,11 +245,12 @@ The Arduino sketch is organized into tabs/modules:
 ```text
 OpenDAD.ino       Main setup and loop
 Sensor.ino        TLE5012 communication and angle reading
-Calibration.ino   Three-point calibration and persistence
+Calibration.ino   Ten-point calibration and persistence
 Target.ino        Target-angle state and difference calculation
 WiFi.ino          Wi-Fi access-point setup
 WebServer.ino     HTTP routes and REST API
 WebPage.ino       Embedded HTML, CSS, and JavaScript interface
+CalibrationPage.ino Calibration page
 ```
 
 `WebPage.ino` contains the browser interface as a `PROGMEM` string. `WebServer.ino` serves that page and handles the API routes. The ASC/GCS parsing and design visualization run in the browser-side JavaScript embedded in the page.
@@ -271,7 +277,7 @@ No external web-server or JavaScript libraries are required by the current inter
 6. Compile and upload the sketch.
 7. Connect a phone, tablet, or computer to the **OpenDAD** Wi-Fi network.
 8. Open `http://192.168.4.1`.
-9. Perform the 0° / 45° / 90° calibration.
+9. Perform the 0° through 90° calibration in 10° steps.
 10. Optionally load a `.asc` or `.gcs` design file and select a facet tier to set its target angle.
 
 The current browser UI and API files are evolving. Confirm the firmware compiles with the installed ESP32 board package before using it on the machine; this README does not imply a hardware validation of every feature or board revision.
